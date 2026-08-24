@@ -13,7 +13,7 @@ export async function createClient() {
 
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
       cookies: {
         getAll() {
@@ -24,8 +24,8 @@ export async function createClient() {
             cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
           } catch {
             // `set` is called from a Server Component during render, where cookies
-            // can't be written. Harmless as long as middleware.ts is refreshing the
-            // session on every request (see src/middleware.ts).
+            // can't be written. Harmless as long as src/proxy.ts is refreshing the
+            // session on every request.
           }
         },
       },

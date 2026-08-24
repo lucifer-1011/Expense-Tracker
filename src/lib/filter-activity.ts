@@ -15,7 +15,7 @@ export const DEFAULT_ACTIVITY_FILTERS: ActivityFiltersState = {
   month: "all",
 };
 
-function isWithinMonth(iso: string, month: MonthFilter): boolean {
+export function isWithinMonth(iso: string, month: MonthFilter): boolean {
   if (month === "all") return true;
 
   const date = new Date(iso);

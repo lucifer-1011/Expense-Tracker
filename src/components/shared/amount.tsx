@@ -1,12 +1,14 @@
 import { formatPaise } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-type AmountVariant = "default" | "positive" | "owing" | "muted";
+type AmountVariant = "default" | "positive" | "owing" | "negative" | "muted";
 
 const VARIANT_CLASSES: Record<AmountVariant, string> = {
   default: "text-foreground",
   positive: "text-positive-muted-foreground",
   owing: "text-owing-muted-foreground",
+  /** Money that left the current viewer's pocket in this specific transaction. */
+  negative: "text-negative-muted-foreground",
   muted: "text-muted-foreground",
 };
 

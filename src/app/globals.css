@@ -49,6 +49,14 @@
   --color-owing-foreground: var(--owing-foreground);
   --color-owing-muted: var(--owing-muted);
   --color-owing-muted-foreground: var(--owing-muted-foreground);
+  /* Transaction direction only (Recent Activity amounts) -- distinct from
+     the softer --owing balance color so a specific "money left your
+     account" event still reads clearly, without being the alarm-red
+     --destructive uses for errors/deletion. */
+  --color-negative: var(--negative);
+  --color-negative-foreground: var(--negative-foreground);
+  --color-negative-muted: var(--negative-muted);
+  --color-negative-muted-foreground: var(--negative-muted-foreground);
   --color-settled: var(--settled);
   --color-settled-muted: var(--settled-muted);
   --color-settled-muted-foreground: var(--settled-muted-foreground);
@@ -91,16 +99,25 @@
   /* Modest radius on containers; controls (buttons/pills/nav) use rounded-full explicitly */
   --radius: 0.625rem;
 
-  /* Owed to you -- subtle green, not a loud success color */
-  --positive: oklch(0.5 0.09 155);
+  /* Money coming in / owed to you -- a clear, confident green, not washed out */
+  --positive: oklch(0.55 0.15 152);
   --positive-foreground: oklch(0.99 0 0);
-  --positive-muted: oklch(0.965 0.018 155);
-  --positive-muted-foreground: oklch(0.42 0.085 155);
-  /* You owe -- subtle amber, deliberately not red so it never reads as an error */
+  --positive-muted: oklch(0.96 0.03 152);
+  --positive-muted-foreground: oklch(0.46 0.145 152);
+  /* You owe -- subtle amber, deliberately not red so it never reads as an error.
+     Reserved for non-transaction contexts (e.g. custom-split "remaining"
+     status) -- money-direction "you owe" amounts use --negative instead, see
+     dashboard-summary.tsx / settlement-row.tsx / members page. */
   --owing: oklch(0.58 0.12 55);
   --owing-foreground: oklch(0.99 0 0);
   --owing-muted: oklch(0.97 0.028 70);
   --owing-muted-foreground: oklch(0.48 0.11 50);
+  /* Money going out -- a clear, confident red, distinct from --destructive's
+     alarm red but strong enough to read at a glance, not just a tint of grey. */
+  --negative: oklch(0.55 0.22 25);
+  --negative-foreground: oklch(0.99 0 0);
+  --negative-muted: oklch(0.96 0.035 25);
+  --negative-muted-foreground: oklch(0.5 0.21 25);
   /* Settled -- neutral gray, no color signal needed */
   --settled: oklch(0.52 0.006 60);
   --settled-muted: oklch(0.955 0.003 75);
@@ -141,14 +158,18 @@
   --chart-4: oklch(0.6 0.006 60);
   --chart-5: oklch(0.4 0.004 60);
 
-  --positive: oklch(0.7 0.1 155);
-  --positive-foreground: oklch(0.16 0.02 155);
+  --positive: oklch(0.72 0.15 152);
+  --positive-foreground: oklch(0.16 0.02 152);
   --positive-muted: oklch(0.27 0.004 60);
-  --positive-muted-foreground: oklch(0.7 0.1 155);
+  --positive-muted-foreground: oklch(0.72 0.15 152);
   --owing: oklch(0.72 0.13 60);
   --owing-foreground: oklch(0.16 0.02 60);
   --owing-muted: oklch(0.27 0.004 60);
   --owing-muted-foreground: oklch(0.72 0.13 60);
+  --negative: oklch(0.7 0.21 25);
+  --negative-foreground: oklch(0.16 0.02 25);
+  --negative-muted: oklch(0.27 0.004 60);
+  --negative-muted-foreground: oklch(0.7 0.21 25);
   --settled: oklch(0.68 0.006 60);
   --settled-muted: oklch(0.27 0.004 60);
   --settled-muted-foreground: oklch(0.68 0.006 60);

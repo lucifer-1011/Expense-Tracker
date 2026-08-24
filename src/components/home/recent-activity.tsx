@@ -5,11 +5,16 @@ import { ArrowRight, Receipt } from "lucide-react";
 
 import { ActivityRow } from "@/components/activity/activity-row";
 import { EmptyState } from "@/components/shared/empty-state";
-import { useAppData } from "@/hooks/use-app-data";
+import { useCurrentFlat } from "@/hooks/use-current-flat";
+import { useExpenses } from "@/hooks/use-expenses";
+import { useSettlements } from "@/hooks/use-settlements";
 import { buildActivityFeed } from "@/lib/build-activity-feed";
 
 export function RecentActivity() {
-  const { expenses, settlements } = useAppData();
+  const { members, membership } = useCurrentFlat();
+  const { expenses } = useExpenses();
+  const { settlements } = useSettlements();
+  const getMember = (flatMemberId: string) => members.find((m) => m.id === flatMemberId);
   const feed = buildActivityFeed(expenses, settlements).slice(0, 6);
 
   return (
@@ -37,7 +42,8 @@ export function RecentActivity() {
             <ActivityRow
               key={item.kind === "expense" ? item.expense.id : item.settlement.id}
               item={item}
-              showDate
+              getMember={getMember}
+              currentMemberId={membership?.id}
             />
           ))}
         </div>

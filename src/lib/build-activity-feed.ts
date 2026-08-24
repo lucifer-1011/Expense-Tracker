@@ -19,29 +19,24 @@ export interface ActivityGroup {
   items: ActivityItem[];
 }
 
-function dayLabel(iso: string): string {
-  const date = new Date(iso);
-  const today = new Date();
-  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const diffDays = Math.round((startOfToday.getTime() - startOfDate.getTime()) / 86_400_000);
-
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
-
-  return date.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "long",
-    year: date.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
-  });
+/** "August 2026" -- toLocaleDateString resolves in the viewer's local
+ * timezone by default (no explicit UTC conversion), so a transaction near a
+ * month boundary groups under the month it actually happened in for the
+ * viewer, not whatever month that UTC instant falls in. */
+function monthLabel(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
-/** Groups an already-sorted feed into day buckets, in the order they first appear. */
-export function groupByDay(items: ActivityItem[]): ActivityGroup[] {
+/**
+ * Groups an already-sorted (newest-first) feed into month buckets, in the
+ * order they first appear -- so the newest month leads, and within it items
+ * stay in the same newest-first order buildActivityFeed already produced.
+ */
+export function groupByMonth(items: ActivityItem[]): ActivityGroup[] {
   const groups: ActivityGroup[] = [];
 
   for (const item of items) {
-    const label = dayLabel(item.date);
+    const label = monthLabel(item.date);
     const lastGroup = groups[groups.length - 1];
     if (lastGroup && lastGroup.label === label) {
       lastGroup.items.push(item);

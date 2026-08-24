@@ -1,195 +1,780 @@
 /**
- * Hand-written to match supabase/migrations/*.sql. If a real Supabase project is
- * linked later, this can be regenerated from the live schema with:
+ * Auto-generated from the live linked Supabase project -- do not hand-edit.
+ * Regenerate after any schema change with:
  *   supabase gen types typescript --linked > src/lib/supabase/database.types.ts
- * (safe to re-run -- it will overwrite this file with the same shape).
+ *
+ * Columns backed by a CHECK constraint (expenses.category, expenses.split_type,
+ * flat_members.role, settlements.method, settlement_requests.method,
+ * settlement_requests.status, notifications.type) come back as plain `string`
+ * here, since Postgres CHECK constraints aren't reflected as enum types.
+ * src/lib/supabase/mappers.ts narrows them to the literal union types declared
+ * in src/types -- that's the "generated/raw DB type" <-> "domain type"
+ * boundary for this project.
  */
 
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
 
-export type DbMemberRole = "owner" | "member";
-export type DbExpenseCategory =
-  | "groceries"
-  | "rent"
-  | "utilities"
-  | "internet"
-  | "food"
-  | "transport"
-  | "household"
-  | "entertainment"
-  | "other";
-export type DbSplitType = "equal" | "custom";
-export type DbSettlementMethod = "cash" | "upi" | "bank_transfer" | "other";
-
-export interface Database {
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.15"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
-      profiles: {
-        Row: {
-          id: string;
-          display_name: string;
-          avatar_url: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id: string;
-          display_name: string;
-          avatar_url?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["profiles"]["Insert"]>;
-      };
-      flats: {
-        Row: {
-          id: string;
-          name: string;
-          invite_code: string;
-          created_by: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          name: string;
-          invite_code?: string;
-          created_by?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["flats"]["Insert"]>;
-      };
-      flat_members: {
-        Row: {
-          id: string;
-          flat_id: string;
-          user_id: string;
-          role: DbMemberRole;
-          is_active: boolean;
-          joined_at: string;
-          left_at: string | null;
-        };
-        Insert: {
-          id?: string;
-          flat_id: string;
-          user_id: string;
-          role?: DbMemberRole;
-          is_active?: boolean;
-          joined_at?: string;
-          left_at?: string | null;
-        };
-        Update: Partial<Database["public"]["Tables"]["flat_members"]["Insert"]>;
-      };
-      expenses: {
-        Row: {
-          id: string;
-          flat_id: string;
-          title: string;
-          description: string | null;
-          category: DbExpenseCategory;
-          amount_paise: number;
-          expense_date: string;
-          split_type: DbSplitType;
-          paid_by: string;
-          created_by: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          flat_id: string;
-          title: string;
-          description?: string | null;
-          category: DbExpenseCategory;
-          amount_paise: number;
-          expense_date: string;
-          split_type?: DbSplitType;
-          paid_by: string;
-          created_by?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["expenses"]["Insert"]>;
-      };
       expense_splits: {
         Row: {
-          id: string;
-          expense_id: string;
-          member_id: string;
-          share_amount_paise: number;
-          created_at: string;
-        };
+          created_at: string
+          expense_id: string
+          id: string
+          member_id: string
+          share_amount_paise: number
+        }
         Insert: {
-          id?: string;
-          expense_id: string;
-          member_id: string;
-          share_amount_paise: number;
-          created_at?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["expense_splits"]["Insert"]>;
-      };
+          created_at?: string
+          expense_id: string
+          id?: string
+          member_id: string
+          share_amount_paise: number
+        }
+        Update: {
+          created_at?: string
+          expense_id?: string
+          id?: string
+          member_id?: string
+          share_amount_paise?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_splits_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_splits_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "flat_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expenses: {
+        Row: {
+          amount_paise: number
+          category: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          expense_date: string
+          flat_id: string
+          id: string
+          paid_by: string
+          split_type: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          amount_paise: number
+          category: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          expense_date: string
+          flat_id: string
+          id?: string
+          paid_by: string
+          split_type?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          amount_paise?: number
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          expense_date?: string
+          flat_id?: string
+          id?: string
+          paid_by?: string
+          split_type?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_flat_id_fkey"
+            columns: ["flat_id"]
+            isOneToOne: false
+            referencedRelation: "flats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_paid_by_fkey"
+            columns: ["paid_by"]
+            isOneToOne: false
+            referencedRelation: "flat_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      flat_members: {
+        Row: {
+          flat_id: string
+          id: string
+          is_active: boolean
+          joined_at: string
+          left_at: string | null
+          role: string
+          user_id: string
+        }
+        Insert: {
+          flat_id: string
+          id?: string
+          is_active?: boolean
+          joined_at?: string
+          left_at?: string | null
+          role?: string
+          user_id: string
+        }
+        Update: {
+          flat_id?: string
+          id?: string
+          is_active?: boolean
+          joined_at?: string
+          left_at?: string | null
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flat_members_flat_id_fkey"
+            columns: ["flat_id"]
+            isOneToOne: false
+            referencedRelation: "flats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "flat_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      flats: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          invite_code: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          invite_code?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          invite_code?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flats_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          actor_user_id: string | null
+          amount_paise: number | null
+          context_text: string | null
+          created_at: string
+          flat_id: string
+          id: string
+          is_read: boolean
+          read_at: string | null
+          recipient_user_id: string
+          related_expense_id: string | null
+          related_settlement_request_id: string | null
+          type: string
+        }
+        Insert: {
+          actor_user_id?: string | null
+          amount_paise?: number | null
+          context_text?: string | null
+          created_at?: string
+          flat_id: string
+          id?: string
+          is_read?: boolean
+          read_at?: string | null
+          recipient_user_id: string
+          related_expense_id?: string | null
+          related_settlement_request_id?: string | null
+          type: string
+        }
+        Update: {
+          actor_user_id?: string | null
+          amount_paise?: number | null
+          context_text?: string | null
+          created_at?: string
+          flat_id?: string
+          id?: string
+          is_read?: boolean
+          read_at?: string | null
+          recipient_user_id?: string
+          related_expense_id?: string | null
+          related_settlement_request_id?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_actor_user_id_fkey"
+            columns: ["actor_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_flat_id_fkey"
+            columns: ["flat_id"]
+            isOneToOne: false
+            referencedRelation: "flats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_recipient_user_id_fkey"
+            columns: ["recipient_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_related_expense_id_fkey"
+            columns: ["related_expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_related_settlement_request_id_fkey"
+            columns: ["related_settlement_request_id"]
+            isOneToOne: false
+            referencedRelation: "settlement_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name: string
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      settlement_requests: {
+        Row: {
+          amount_paise: number
+          created_at: string
+          created_by: string | null
+          flat_id: string
+          id: string
+          method: string
+          note: string | null
+          payer_member_id: string
+          receiver_member_id: string
+          resolved_at: string | null
+          resolved_by: string | null
+          settlement_id: string | null
+          status: string
+        }
+        Insert: {
+          amount_paise: number
+          created_at?: string
+          created_by?: string | null
+          flat_id: string
+          id?: string
+          method?: string
+          note?: string | null
+          payer_member_id: string
+          receiver_member_id: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          settlement_id?: string | null
+          status?: string
+        }
+        Update: {
+          amount_paise?: number
+          created_at?: string
+          created_by?: string | null
+          flat_id?: string
+          id?: string
+          method?: string
+          note?: string | null
+          payer_member_id?: string
+          receiver_member_id?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          settlement_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "settlement_requests_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlement_requests_flat_id_fkey"
+            columns: ["flat_id"]
+            isOneToOne: false
+            referencedRelation: "flats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlement_requests_payer_member_id_fkey"
+            columns: ["payer_member_id"]
+            isOneToOne: false
+            referencedRelation: "flat_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlement_requests_receiver_member_id_fkey"
+            columns: ["receiver_member_id"]
+            isOneToOne: false
+            referencedRelation: "flat_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlement_requests_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlement_requests_settlement_id_fkey"
+            columns: ["settlement_id"]
+            isOneToOne: false
+            referencedRelation: "settlements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       settlements: {
         Row: {
-          id: string;
-          flat_id: string;
-          from_member_id: string;
-          to_member_id: string;
-          amount_paise: number;
-          method: DbSettlementMethod;
-          notes: string | null;
-          settled_at: string;
-          created_by: string | null;
-          created_at: string;
-        };
+          amount_paise: number
+          created_at: string
+          created_by: string | null
+          flat_id: string
+          from_member_id: string
+          id: string
+          method: string
+          notes: string | null
+          settled_at: string
+          to_member_id: string
+        }
         Insert: {
-          id?: string;
-          flat_id: string;
-          from_member_id: string;
-          to_member_id: string;
-          amount_paise: number;
-          method?: DbSettlementMethod;
-          notes?: string | null;
-          settled_at?: string;
-          created_by?: string | null;
-          created_at?: string;
-        };
-        // Intentionally no Update type exported for use -- settlements are append-only
-        // (no UPDATE grant exists in the database either; see the RLS migration).
-        Update: never;
-      };
-    };
-    Views: Record<string, never>;
+          amount_paise: number
+          created_at?: string
+          created_by?: string | null
+          flat_id: string
+          from_member_id: string
+          id?: string
+          method?: string
+          notes?: string | null
+          settled_at?: string
+          to_member_id: string
+        }
+        Update: {
+          amount_paise?: number
+          created_at?: string
+          created_by?: string | null
+          flat_id?: string
+          from_member_id?: string
+          id?: string
+          method?: string
+          notes?: string | null
+          settled_at?: string
+          to_member_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "settlements_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlements_flat_id_fkey"
+            columns: ["flat_id"]
+            isOneToOne: false
+            referencedRelation: "flats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlements_from_member_id_fkey"
+            columns: ["from_member_id"]
+            isOneToOne: false
+            referencedRelation: "flat_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlements_to_member_id_fkey"
+            columns: ["to_member_id"]
+            isOneToOne: false
+            referencedRelation: "flat_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
     Functions: {
+      approve_settlement_request: {
+        Args: { request_id: string }
+        Returns: {
+          amount_paise: number
+          created_at: string
+          created_by: string | null
+          flat_id: string
+          from_member_id: string
+          id: string
+          method: string
+          notes: string | null
+          settled_at: string
+          to_member_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "settlements"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_flat: {
-        Args: { flat_name: string };
-        Returns: Database["public"]["Tables"]["flats"]["Row"];
-      };
-      join_flat_with_invite_code: {
-        Args: { code: string };
-        Returns: Database["public"]["Tables"]["flat_members"]["Row"];
-      };
-      leave_flat: {
-        Args: { target_flat_id: string };
-        Returns: Database["public"]["Tables"]["flat_members"]["Row"];
-      };
-      is_flat_member: {
-        Args: { target_flat_id: string };
-        Returns: boolean;
-      };
+        Args: { flat_name: string }
+        Returns: {
+          created_at: string
+          created_by: string | null
+          id: string
+          invite_code: string
+          name: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "flats"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_settlement_request: {
+        Args: {
+          amount_paise: number
+          method?: string
+          note?: string
+          receiver_member_id: string
+        }
+        Returns: {
+          amount_paise: number
+          created_at: string
+          created_by: string | null
+          flat_id: string
+          id: string
+          method: string
+          note: string | null
+          payer_member_id: string
+          receiver_member_id: string
+          resolved_at: string | null
+          resolved_by: string | null
+          settlement_id: string | null
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "settlement_requests"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      generate_invite_code: { Args: never; Returns: string }
       is_active_flat_member: {
-        Args: { target_flat_id: string };
-        Returns: boolean;
-      };
-      is_flat_owner: {
-        Args: { target_flat_id: string };
-        Returns: boolean;
-      };
-      shares_flat_with: {
-        Args: { target_user_id: string };
-        Returns: boolean;
-      };
-    };
-    Enums: Record<string, never>;
-  };
+        Args: { target_flat_id: string }
+        Returns: boolean
+      }
+      is_flat_member: { Args: { target_flat_id: string }; Returns: boolean }
+      is_flat_owner: { Args: { target_flat_id: string }; Returns: boolean }
+      join_flat_with_invite_code: {
+        Args: { code: string }
+        Returns: {
+          flat_id: string
+          id: string
+          is_active: boolean
+          joined_at: string
+          left_at: string | null
+          role: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "flat_members"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      leave_flat: {
+        Args: { target_flat_id: string }
+        Returns: {
+          flat_id: string
+          id: string
+          is_active: boolean
+          joined_at: string
+          left_at: string | null
+          role: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "flat_members"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      reject_settlement_request: {
+        Args: { request_id: string }
+        Returns: {
+          amount_paise: number
+          created_at: string
+          created_by: string | null
+          flat_id: string
+          id: string
+          method: string
+          note: string | null
+          payer_member_id: string
+          receiver_member_id: string
+          resolved_at: string | null
+          resolved_by: string | null
+          settlement_id: string | null
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "settlement_requests"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      shares_flat_with: { Args: { target_user_id: string }; Returns: boolean }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
 }
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
+  public: {
+    Enums: {},
+  },
+} as const

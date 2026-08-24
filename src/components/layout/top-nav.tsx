@@ -5,15 +5,17 @@ import { usePathname } from "next/navigation";
 import { Plus, Wallet2 } from "lucide-react";
 
 import { AddExpenseFlow } from "@/components/expenses/add-expense-flow";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { MemberAvatar } from "@/components/shared/member-avatar";
 import { Button } from "@/components/ui/button";
-import { useAppData } from "@/hooks/use-app-data";
+import { useCurrentFlat } from "@/hooks/use-current-flat";
 import { cn } from "@/lib/utils";
 import { isNavItemActive, NAV_ITEMS } from "./nav-items";
+import { ThemeToggle } from "./theme-toggle";
 
 export function TopNav() {
   const pathname = usePathname();
-  const { flat, currentMember } = useAppData();
+  const { flat, profile } = useCurrentFlat();
 
   return (
     <header className="sticky top-0 z-30 hidden border-b border-border bg-background/95 backdrop-blur-sm lg:block">
@@ -23,7 +25,7 @@ export function TopNav() {
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
               <Wallet2 className="h-4 w-4" />
             </div>
-            <span className="text-sm font-semibold text-foreground">{flat.name}</span>
+            <span className="text-sm font-semibold text-foreground">{flat?.name}</span>
           </div>
 
           <nav className="flex items-center gap-1">
@@ -56,7 +58,14 @@ export function TopNav() {
               </Button>
             }
           />
-          <MemberAvatar member={currentMember} size="sm" />
+          <ThemeToggle />
+          <NotificationBell />
+          {profile && (
+            <MemberAvatar
+              member={{ id: profile.id, name: profile.displayName, avatarUrl: profile.avatarUrl ?? undefined }}
+              size="sm"
+            />
+          )}
         </div>
       </div>
     </header>

@@ -12,14 +12,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useAppData } from "@/hooks/use-app-data";
-
 export function InviteMemberDialog({
   trigger,
+  flat,
 }: {
   trigger?: ReactElement<{ onClick?: () => void }>;
+  flat: { name: string; inviteCode: string };
 }) {
-  const { flat } = useAppData();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 

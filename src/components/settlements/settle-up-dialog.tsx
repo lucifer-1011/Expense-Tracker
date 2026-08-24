@@ -18,7 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 
 import { MemberAvatar } from "@/components/shared/member-avatar";
-import { useAppData } from "@/hooks/use-app-data";
+import { useCurrentFlat } from "@/hooks/use-current-flat";
+import { useSettlements } from "@/hooks/use-settlements";
 import { settlementFormSchema } from "@/lib/validations/settlement";
 import type { FlatMember, SettlementMethod, SuggestedSettlement } from "@/types";
 
@@ -38,17 +39,29 @@ export function SettleUpDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { membership } = useCurrentFlat();
+  // The person who owes money must never be able to instantly settle their own
+  // debt -- when *they* are the one submitting this form, it creates a pending
+  // request instead (see SettleUpForm). The receiver marking a payment they
+  // themselves received needs no one else's approval, so that path stays instant.
+  const isDebtor = Boolean(suggestion && membership && suggestion.fromFlatMemberId === membership.id);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Settle up</DialogTitle>
-          <DialogDescription>Record this payment between flatmates.</DialogDescription>
+          <DialogDescription>
+            {isDebtor
+              ? "Sending this doesn't settle your balance right away -- the person you paid needs to confirm it first."
+              : "Record this payment between flatmates."}
+          </DialogDescription>
         </DialogHeader>
         {suggestion && (
           <SettleUpForm
             key={`${suggestion.fromFlatMemberId}-${suggestion.toFlatMemberId}-${suggestion.amountPaise}`}
             suggestion={suggestion}
+            isDebtor={isDebtor}
             onDone={() => onOpenChange(false)}
           />
         )}
@@ -63,16 +76,21 @@ export function SettleUpDialog({
  */
 function SettleUpForm({
   suggestion,
+  isDebtor,
   onDone,
 }: {
   suggestion: SuggestedSettlement;
+  isDebtor: boolean;
   onDone: () => void;
 }) {
-  const { getMember, recordSettlement } = useAppData();
+  const { members } = useCurrentFlat();
+  const { recordSettlement, requestSettlement } = useSettlements();
+  const getMember = (flatMemberId: string) => members.find((m) => m.id === flatMemberId);
   const [amountRupees, setAmountRupees] = useState(() => (suggestion.amountPaise / 100).toString());
   const [method, setMethod] = useState<SettlementMethod>("upi");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fromMember = getMember(suggestion.fromFlatMemberId);
   const toMember = getMember(suggestion.toFlatMemberId);
@@ -81,7 +99,7 @@ function SettleUpForm({
   const from: FlatMember = fromMember;
   const to: FlatMember = toMember;
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const parsed = settlementFormSchema.safeParse({
       fromFlatMemberId: from.id,
@@ -96,15 +114,39 @@ function SettleUpForm({
       return;
     }
 
-    recordSettlement({
-      fromFlatMemberId: from.id,
-      toFlatMemberId: to.id,
-      amountPaise: Math.round(parsed.data.amountRupees * 100),
-      method: parsed.data.method,
-      note: parsed.data.note,
-    });
-    toast.success(`Marked ${from.name} → ${to.name} as settled`);
-    onDone();
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      if (isDebtor) {
+        await requestSettlement({
+          receiverFlatMemberId: to.id,
+          amountPaise: Math.round(parsed.data.amountRupees * 100),
+          method: parsed.data.method,
+          note: parsed.data.note,
+        });
+        toast.success(`Settlement request sent to ${to.name}. Your balance will update once they confirm.`);
+      } else {
+        await recordSettlement({
+          fromFlatMemberId: from.id,
+          toFlatMemberId: to.id,
+          amountPaise: Math.round(parsed.data.amountRupees * 100),
+          method: parsed.data.method,
+          note: parsed.data.note,
+        });
+        toast.success(`Marked ${from.name} → ${to.name} as settled`);
+      }
+      onDone();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : isDebtor
+            ? "Couldn't send the settlement request. Try again."
+            : "Couldn't record the settlement. Try again."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -133,7 +175,7 @@ function SettleUpForm({
               inputMode="decimal"
               value={amountRupees}
               onChange={(e) => setAmountRupees(e.target.value)}
-              className="h-11 rounded-xl pl-6 tabular-nums"
+              className="h-12 rounded-xl pl-6 tabular-nums"
             />
           </div>
         </div>
@@ -165,10 +207,25 @@ function SettleUpForm({
           />
         </div>
 
-        {error && <p className="text-xs text-destructive">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
 
-        <Button type="submit" className="h-12 w-full cursor-pointer rounded-full" size="lg">
-          Confirm settlement
+        <Button
+          type="submit"
+          className="h-14 w-full cursor-pointer rounded-full text-base"
+          size="lg"
+          disabled={isSubmitting}
+        >
+          {isSubmitting
+            ? isDebtor
+              ? "Sending..."
+              : "Confirming..."
+            : isDebtor
+              ? "Send settlement request"
+              : "Confirm settlement"}
         </Button>
       </form>
     </>

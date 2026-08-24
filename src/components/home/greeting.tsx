@@ -1,6 +1,6 @@
 "use client";
 
-import { useAppData } from "@/hooks/use-app-data";
+import { useCurrentFlat } from "@/hooks/use-current-flat";
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -10,8 +10,8 @@ function getGreeting(): string {
 }
 
 export function Greeting() {
-  const { currentMember } = useAppData();
-  const firstName = currentMember.name.split(" ")[0];
+  const { profile } = useCurrentFlat();
+  const firstName = profile?.displayName.split(" ")[0] ?? "";
 
   return (
     <div>

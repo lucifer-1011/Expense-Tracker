@@ -1,8 +1,10 @@
 import { CheckCircle2 } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { MemberAvatar } from "@/components/shared/member-avatar";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatPaise } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { FlatMember, Settlement, SettlementMethod } from "@/types";
 
 const METHOD_LABELS: Record<SettlementMethod, string> = {
@@ -12,36 +14,47 @@ const METHOD_LABELS: Record<SettlementMethod, string> = {
   other: "Other",
 };
 
-/** "Rahul owes you ₹850 [Mark as paid]" or "You owe Aman ₹500 [Settle up]" */
+/**
+ * "Rahul owes you ₹850 [Mark as paid]" or "You owe Aman ₹500 [Settle up]".
+ * `action` lets a caller replace the default single button -- used for a
+ * pending settlement request's Approve/Reject pair, or a disabled "Pending"
+ * indicator -- without every other caller needing to know about that.
+ */
 export function SuggestedSettlementRow({
   member,
   amountPaise,
   youAreOwed,
   onAction,
+  action,
 }: {
   member: FlatMember;
   amountPaise: number;
   youAreOwed: boolean;
-  onAction: () => void;
+  onAction?: () => void;
+  action?: ReactNode;
 }) {
   return (
     <div className="flex items-center gap-3 py-3">
       <MemberAvatar member={member} size="md" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-foreground">
-          {youAreOwed ? `${member.name} owes you` : `You owe ${member.name}`}
-        </p>
-        <p
-          className={
-            youAreOwed ? "text-sm font-semibold text-positive-muted-foreground" : "text-sm font-semibold text-owing-muted-foreground"
-          }
-        >
-          {formatPaise(amountPaise)}
+        <p className="truncate text-sm font-semibold text-foreground">{member.name}</p>
+        <p className="mt-0.5 truncate text-sm text-muted-foreground">
+          {youAreOwed ? "Owes you " : "You owe "}
+          <span
+            className={cn(
+              "font-semibold tabular-nums",
+              youAreOwed ? "text-positive-muted-foreground" : "text-negative-muted-foreground"
+            )}
+          >
+            {formatPaise(amountPaise)}
+          </span>
         </p>
       </div>
-      <Button size="sm" className="shrink-0 cursor-pointer rounded-full" onClick={onAction}>
-        {youAreOwed ? "Mark as paid" : "Settle up"}
-      </Button>
+      {action ?? (
+        <Button size="sm" className="shrink-0 cursor-pointer rounded-full" onClick={onAction}>
+          {youAreOwed ? "Mark as paid" : "Settle up"}
+        </Button>
+      )}
     </div>
   );
 }

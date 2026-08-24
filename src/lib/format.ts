@@ -39,15 +39,25 @@ export function formatDate(iso: string, options?: { withYear?: boolean }): strin
   return options?.withYear ? dateFormatterWithYear.format(date) : dateFormatter.format(date);
 }
 
-export function formatRelativeDate(iso: string): string {
-  const date = new Date(iso);
-  const today = new Date();
-  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const diffDays = Math.round((startOfToday.getTime() - startOfDate.getTime()) / 86_400_000);
+const transactionDateFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
 
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays > 1 && diffDays < 7) return `${diffDays} days ago`;
-  return formatDate(iso, { withYear: date.getFullYear() !== today.getFullYear() });
+const transactionTimeFormatter = new Intl.DateTimeFormat("en-US", {
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+});
+
+/**
+ * "Aug 24, 2026 at 1:35 AM" -- the exact moment a transaction happened, never
+ * a relative label. `new Date(iso)` + Intl formatting without an explicit
+ * `timeZone` both resolve to the viewer's local timezone automatically, so
+ * this is already correct across timezones without any manual offset math.
+ */
+export function formatDateTime(iso: string): string {
+  const date = new Date(iso);
+  return `${transactionDateFormatter.format(date)} at ${transactionTimeFormatter.format(date)}`;
 }

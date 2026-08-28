@@ -11,8 +11,9 @@ import { ListSkeleton } from "@/components/shared/list-skeleton";
 import { useCurrentFlat } from "@/hooks/use-current-flat";
 import { useExpenses } from "@/hooks/use-expenses";
 import { useSettlements } from "@/hooks/use-settlements";
-import { buildActivityFeed, groupByMonth } from "@/lib/build-activity-feed";
+import { buildActivityFeed, calculateMonthlyExpenseTotals, groupByMonth } from "@/lib/build-activity-feed";
 import { DEFAULT_ACTIVITY_FILTERS, filterActivity } from "@/lib/filter-activity";
+import { formatPaise } from "@/lib/format";
 
 export default function ActivityPage() {
   const {
@@ -42,6 +43,7 @@ export default function ActivityPage() {
   const feed = useMemo(() => buildActivityFeed(expenses, settlements), [expenses, settlements]);
   const filtered = useMemo(() => filterActivity(feed, filters), [feed, filters]);
   const groups = useMemo(() => groupByMonth(filtered), [filtered]);
+  const monthlyTotals = useMemo(() => calculateMonthlyExpenseTotals(expenses), [expenses]);
   const hasAnyActivity = feed.length > 0;
 
   return (
@@ -72,10 +74,15 @@ export default function ActivityPage() {
         <div className="space-y-6">
           {groups.map((group) => (
             <section key={group.label}>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {group.label}
-              </p>
-              <div className="mt-1 divide-y divide-border">
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-card px-4 py-3 ring-1 ring-foreground/10">
+                <p className="text-sm font-semibold uppercase tracking-wide text-foreground">
+                  {group.label}
+                </p>
+                <p className="shrink-0 text-base font-bold tabular-nums text-foreground">
+                  {formatPaise(monthlyTotals.get(group.label) ?? 0)}
+                </p>
+              </div>
+              <div className="mt-3 divide-y divide-border">
                 {group.items.map((item) => (
                   <ActivityRow
                     key={item.kind === "expense" ? item.expense.id : item.settlement.id}

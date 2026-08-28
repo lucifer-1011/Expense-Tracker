@@ -5,138 +5,92 @@ import { useMemo } from "react";
 import { useCurrentFlat } from "@/hooks/use-current-flat";
 import { useExpenses } from "@/hooks/use-expenses";
 import { useSettlements } from "@/hooks/use-settlements";
+import { useCountUp } from "@/hooks/use-count-up";
+import { useHeroFontSize } from "@/hooks/use-hero-font-size";
 import { getMemberBalance } from "@/lib/calculations/balances";
-import { calculateMonthlySpending } from "@/lib/calculations/monthly-spending";
+import { calculateMonthlySpending, calculateMyMonthlySpending } from "@/lib/calculations/monthly-spending";
 import { formatPaise } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { FlatMember } from "@/types";
-
-interface BreakdownRow {
-  member: FlatMember;
-  amountPaise: number;
-}
-
-const MAX_VISIBLE_ROWS = 3;
 
 /**
- * Replaces the old "Your balance / You paid / Your share" hero, which made a
- * first-time user reconcile three numbers to understand their situation.
- * Shows three independent, already-plain-language facts instead: how much
- * the whole flat spent this month, how much the signed-in member owes, and
- * how much they're owed -- each sourced directly from the same
- * ExpensesProvider/SettlementsProvider data (and the same balances/suggested-
- * settlements calculations) the rest of the app already uses, so there's no
- * second, divergent notion of "balance" anywhere.
+ * My Spending + Balance as one continuous panel with a single soft rule
+ * between them. Every color here is a theme token (text-foreground,
+ * text-muted-foreground, text-positive/negative-muted-foreground) so light
+ * and dark mode both resolve correctly automatically -- nothing here is a
+ * hardcoded hex value. The hero auto-fits down through 76/64/56px so a wide
+ * amount never overflows its column; the count-up animates off the real
+ * (paise) target, not the display string.
  */
 export function DashboardSummary() {
-  const { flat, membership, members } = useCurrentFlat();
+  const { membership } = useCurrentFlat();
   const { expenses } = useExpenses();
-  const { balances, suggestedSettlements } = useSettlements();
-
-  const monthlySpendingPaise = useMemo(() => calculateMonthlySpending(expenses), [expenses]);
-  const currentMonthName = new Date().toLocaleDateString("en-US", { month: "long" });
+  const { balances } = useSettlements();
 
   const currentMemberId = membership?.id ?? "";
+  const flatMonthlySpendingPaise = useMemo(() => calculateMonthlySpending(expenses), [expenses]);
+  const myMonthlySpendingPaise = useMemo(
+    () => calculateMyMonthlySpending(expenses, currentMemberId),
+    [expenses, currentMemberId]
+  );
+  const currentMonthName = new Date().toLocaleDateString("en-US", { month: "long" });
+
   const balance = getMemberBalance(balances, currentMemberId);
   const youOwePaise = Math.max(0, -balance.netBalancePaise);
   const youAreOwedPaise = Math.max(0, balance.netBalancePaise);
 
-  const getMember = (flatMemberId: string) => members.find((m) => m.id === flatMemberId);
+  const animatedMyPaise = useCountUp(myMonthlySpendingPaise);
+  const animatedYouOwePaise = useCountUp(youOwePaise);
+  const animatedYouAreOwedPaise = useCountUp(youAreOwedPaise);
 
-  const oweBreakdown: BreakdownRow[] = suggestedSettlements
-    .filter((s) => s.fromFlatMemberId === currentMemberId)
-    .map((s) => ({ member: getMember(s.toFlatMemberId), amountPaise: s.amountPaise }))
-    .filter((row): row is BreakdownRow => Boolean(row.member));
-
-  const owedBreakdown: BreakdownRow[] = suggestedSettlements
-    .filter((s) => s.toFlatMemberId === currentMemberId)
-    .map((s) => ({ member: getMember(s.fromFlatMemberId), amountPaise: s.amountPaise }))
-    .filter((row): row is BreakdownRow => Boolean(row.member));
+  const heroRef = useHeroFontSize(formatPaise(myMonthlySpendingPaise));
 
   return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          {currentMonthName} flat spending
+    <div>
+      <div className="px-[22px] pt-[34px] pb-[30px]">
+        <p className="text-[13px] text-muted-foreground">My spending in {currentMonthName}</p>
+        <p
+          ref={heroRef}
+          className="mt-[10px] font-extrabold tabular-nums text-foreground"
+          style={{ fontSize: 76, lineHeight: 0.92, letterSpacing: "-0.045em" }}
+        >
+          {formatPaise(animatedMyPaise)}
         </p>
-        <p className="mt-2 text-5xl font-extrabold tracking-tight tabular-nums text-foreground">
-          {formatPaise(monthlySpendingPaise)}
-        </p>
-        <p className="mt-1.5 text-sm text-muted-foreground">
-          {monthlySpendingPaise === 0
-            ? "No expenses added this month"
-            : `Total spent by everyone in ${flat?.name ?? "your flat"}`}
+        <p className="mt-[10px] text-[13.5px] text-muted-foreground">
+          Flat spending in {currentMonthName} ·{" "}
+          <span className="font-semibold text-foreground">{formatPaise(flatMonthlySpendingPaise)}</span>
         </p>
       </div>
 
-      <div className="grid grid-cols-2 divide-x divide-border border-t border-border pt-5">
-        <SummaryColumn
-          label="You owe"
-          amountPaise={youOwePaise}
-          tone="negative"
-          emptyText="You're all settled up"
-          breakdown={oweBreakdown}
-          className="pr-4"
-        />
-        <SummaryColumn
-          label="You are owed"
-          amountPaise={youAreOwedPaise}
-          tone="positive"
-          emptyText="No one owes you money"
-          breakdown={owedBreakdown}
-          className="pl-4"
-        />
-      </div>
-    </div>
-  );
-}
+      <div className="h-px w-full bg-border" />
 
-function SummaryColumn({
-  label,
-  amountPaise,
-  tone,
-  emptyText,
-  breakdown,
-  className,
-}: {
-  label: string;
-  amountPaise: number;
-  tone: "negative" | "positive";
-  emptyText: string;
-  breakdown: BreakdownRow[];
-  className?: string;
-}) {
-  const visible = breakdown.slice(0, MAX_VISIBLE_ROWS);
-  const extraCount = breakdown.length - visible.length;
-
-  return (
-    <div className={cn("min-w-0", className)}>
-      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p
-        className={cn(
-          "mt-1.5 text-2xl font-extrabold tracking-tight tabular-nums",
-          amountPaise > 0
-            ? tone === "negative"
-              ? "text-negative-muted-foreground"
-              : "text-positive-muted-foreground"
-            : "text-foreground"
-        )}
-      >
-        {formatPaise(amountPaise)}
-      </p>
-
-      {breakdown.length === 0 ? (
-        <p className="mt-1 text-xs text-muted-foreground">{emptyText}</p>
-      ) : (
-        <div className="mt-1.5 space-y-0.5">
-          {visible.map(({ member, amountPaise: rowAmountPaise }) => (
-            <p key={member.id} className="truncate text-xs text-muted-foreground">
-              {member.name} <span className="font-medium text-foreground">{formatPaise(rowAmountPaise)}</span>
-            </p>
-          ))}
-          {extraCount > 0 && <p className="text-xs text-muted-foreground">+{extraCount} more</p>}
+      <div className="px-[22px] py-[26px]">
+        <div className="flex items-baseline justify-between gap-4">
+          <p className="text-[14.5px] text-muted-foreground">You owe</p>
+          <p
+            className={cn(
+              "tabular-nums",
+              youOwePaise > 0
+                ? "text-[30px] font-extrabold tracking-[-0.03em] text-negative-muted-foreground"
+                : "text-[22px] font-semibold text-muted-foreground"
+            )}
+          >
+            {formatPaise(animatedYouOwePaise)}
+          </p>
         </div>
-      )}
+        <div className="mt-[16px] flex items-baseline justify-between gap-4">
+          <p className="text-[14.5px] text-muted-foreground">You are owed</p>
+          <p
+            className={cn(
+              "tabular-nums",
+              youAreOwedPaise > 0
+                ? "text-[30px] font-extrabold tracking-[-0.03em] text-positive-muted-foreground"
+                : "text-[22px] font-semibold text-muted-foreground"
+            )}
+          >
+            {formatPaise(animatedYouAreOwedPaise)}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

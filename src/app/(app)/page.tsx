@@ -2,13 +2,15 @@
 
 import { DashboardSummary } from "@/components/home/dashboard-summary";
 import { Greeting } from "@/components/home/greeting";
-import { RecentActivity } from "@/components/home/recent-activity";
-import { WhoOwesWhat } from "@/components/home/who-owes-what";
-import { Skeleton } from "@/components/ui/skeleton";
+import { SettlementActions } from "@/components/home/settlement-actions";
 import { ErrorState } from "@/components/shared/error-state";
-import { ListSkeleton } from "@/components/shared/list-skeleton";
+import { cn } from "@/lib/utils";
 import { useExpenses } from "@/hooks/use-expenses";
 import { useSettlements } from "@/hooks/use-settlements";
+
+function LoadingBlock({ className }: { className: string }) {
+  return <div className={cn("animate-pulse bg-muted", className)} />;
+}
 
 export default function HomePage() {
   const { isLoading: expensesLoading, error: expensesError, refresh: refreshExpenses } = useExpenses();
@@ -17,45 +19,43 @@ export default function HomePage() {
   const error = expensesError ?? settlementsError;
   const refresh = () => Promise.all([refreshExpenses(), refreshSettlements()]);
 
-  if (isLoading) {
-    return (
-      <div className="space-y-10 pb-6">
-        <div className="space-y-2">
-          <Skeleton className="h-4 w-24 rounded-full" />
-          <Skeleton className="h-9 w-40 rounded-full" />
-        </div>
-        <div className="space-y-3">
-          <Skeleton className="h-3 w-28 rounded-full" />
-          <Skeleton className="h-12 w-48 rounded-full" />
-        </div>
-        <ListSkeleton rows={4} />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="space-y-10 pb-6">
-        <Greeting />
-        <ErrorState title="Couldn't load your dashboard" description={error} onRetry={refresh} />
-      </div>
-    );
-  }
-
   return (
-    <div className="pb-6">
-      <Greeting />
-      {/* Spacing widens progressively -- the summary continues straight from
-          the greeting, "who owes what" is a related-but-distinct topic, and
-          activity is the clearest break (a history log, not a balance). */}
-      <div className="mt-6">
-        <DashboardSummary />
-      </div>
-      <div className="mt-9">
-        <WhoOwesWhat />
-      </div>
-      <div className="mt-10">
-        <RecentActivity />
+    <div className="-mx-4 -mt-5 pb-10 text-foreground sm:-mx-6 lg:-mx-6 lg:-mt-10">
+      <div className="mx-auto max-w-[480px]">
+        {isLoading ? (
+          <>
+            <div className="px-[22px] pt-[22px] pb-[18px]">
+              <LoadingBlock className="h-[12px] w-24" />
+              <LoadingBlock className="mt-2 h-[19px] w-32" />
+            </div>
+            <div className="h-[2px] w-full bg-border" />
+            <div className="px-[22px] pt-[34px] pb-[30px]">
+              <LoadingBlock className="h-[13px] w-36" />
+              <LoadingBlock className="mt-[10px] h-[76px] w-52" />
+              <LoadingBlock className="mt-[10px] h-[13px] w-44" />
+            </div>
+            <div className="h-px w-full bg-border" />
+            <div className="space-y-4 px-[22px] py-[26px]">
+              <LoadingBlock className="h-[22px] w-full" />
+              <LoadingBlock className="h-[22px] w-full" />
+            </div>
+          </>
+        ) : error ? (
+          <>
+            <Greeting />
+            <div className="px-[22px]">
+              <ErrorState title="Couldn't load your dashboard" description={error} onRetry={refresh} />
+            </div>
+          </>
+        ) : (
+          <>
+            <Greeting />
+            <div className="h-[2px] w-full bg-border" />
+            <DashboardSummary />
+            <div className="h-[2px] w-full bg-border" />
+            <SettlementActions />
+          </>
+        )}
       </div>
     </div>
   );

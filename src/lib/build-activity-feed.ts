@@ -23,7 +23,7 @@ export interface ActivityGroup {
  * timezone by default (no explicit UTC conversion), so a transaction near a
  * month boundary groups under the month it actually happened in for the
  * viewer, not whatever month that UTC instant falls in. */
-function monthLabel(iso: string): string {
+export function monthLabel(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
@@ -46,4 +46,20 @@ export function groupByMonth(items: ActivityItem[]): ActivityGroup[] {
   }
 
   return groups;
+}
+
+/**
+ * Total paise spent by the whole flat in each calendar month, keyed by the
+ * same label groupByMonth uses. Computed straight from expenses (not the
+ * merged activity feed), so settlements -- transfers between members, not
+ * new spending -- never contribute, and the figure stays independent of
+ * whatever search/category filters the Activity page currently has applied.
+ */
+export function calculateMonthlyExpenseTotals(expenses: Expense[]): Map<string, number> {
+  const totals = new Map<string, number>();
+  for (const expense of expenses) {
+    const label = monthLabel(expense.date);
+    totals.set(label, (totals.get(label) ?? 0) + expense.amountPaise);
+  }
+  return totals;
 }

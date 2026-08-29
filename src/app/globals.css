@@ -190,6 +190,10 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Lets the custom pull-to-refresh (src/components/layout/pull-to-refresh.tsx)
+       own the "pull down at the top" gesture instead of the browser's own
+       native pull-to-refresh (which would trigger a full page reload). */
+    overscroll-behavior-y: contain;
   }
   html {
     @apply font-sans;

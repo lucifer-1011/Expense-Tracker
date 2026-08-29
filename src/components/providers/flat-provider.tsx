@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { createClient } from "@/lib/supabase/client";
+import { withSessionRetry } from "@/lib/supabase/with-session-retry";
 import { useAuth } from "@/hooks/use-auth";
 import { mapFlatMemberRow } from "@/lib/supabase/mappers";
 import type { FlatMember } from "@/types";
@@ -88,15 +89,19 @@ export function FlatProvider({ children }: { children: ReactNode }) {
       { data: profileRow, error: profileError },
       { data: membershipRow, error: membershipError },
     ] = await Promise.all([
-      supabase.from("profiles").select("id, display_name, avatar_url").eq("id", user.id).maybeSingle(),
-      supabase
-        .from("flat_members")
-        .select("id, role, flats(id, name, invite_code)")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .order("joined_at", { ascending: true })
-        .limit(1)
-        .maybeSingle(),
+      withSessionRetry(() =>
+        supabase.from("profiles").select("id, display_name, avatar_url").eq("id", user.id).maybeSingle()
+      ),
+      withSessionRetry(() =>
+        supabase
+          .from("flat_members")
+          .select("id, role, flats(id, name, invite_code)")
+          .eq("user_id", user.id)
+          .eq("is_active", true)
+          .order("joined_at", { ascending: true })
+          .limit(1)
+          .maybeSingle()
+      ),
     ]);
 
     // Leave existing profile/flat/membership/members state as-is on error --
@@ -124,11 +129,13 @@ export function FlatProvider({ children }: { children: ReactNode }) {
       // Every member (active or former) of this flat, joined with their
       // profile for display -- RLS (flat_members_select_same_flat) already
       // scopes this to flats the caller belongs to.
-      const { data: memberRows, error: membersError } = await supabase
-        .from("flat_members")
-        .select("id, flat_id, user_id, role, is_active, joined_at, left_at, profiles(id, display_name, avatar_url, created_at, updated_at)")
-        .eq("flat_id", flatRow.id)
-        .order("joined_at", { ascending: true });
+      const { data: memberRows, error: membersError } = await withSessionRetry(() =>
+        supabase
+          .from("flat_members")
+          .select("id, flat_id, user_id, role, is_active, joined_at, left_at, profiles(id, display_name, avatar_url, created_at, updated_at)")
+          .eq("flat_id", flatRow.id)
+          .order("joined_at", { ascending: true })
+      );
 
       if (membersError) {
         setError(membersError.message);

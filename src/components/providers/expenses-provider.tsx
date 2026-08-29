@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
 import { mapExpenseRow } from "@/lib/supabase/mappers";
+import { withSessionRetry } from "@/lib/supabase/with-session-retry";
 import type { Database } from "@/lib/supabase/database.types";
 import type { Expense, ExpenseCategory, ExpenseSplit, SplitType } from "@/types";
 import { useCurrentFlat } from "./flat-provider";
@@ -68,11 +69,13 @@ export function ExpensesProvider({ children }: { children: ReactNode }) {
 
     // expense_splits(*) embeds as a one-to-many array via the expense_id FK
     // -- one round trip instead of a separate splits query.
-    const { data, error: fetchError } = await supabase
-      .from("expenses")
-      .select("*, expense_splits(*)")
-      .eq("flat_id", flat.id)
-      .order("expense_date", { ascending: false });
+    const { data, error: fetchError } = await withSessionRetry(() =>
+      supabase
+        .from("expenses")
+        .select("*, expense_splits(*)")
+        .eq("flat_id", flat.id)
+        .order("expense_date", { ascending: false })
+    );
 
     if (fetchError) {
       setError(fetchError.message);

@@ -1,12 +1,36 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Plus, Receipt, User, Users } from "lucide-react";
 
-import { AddExpenseFlow } from "@/components/expenses/add-expense-flow";
 import { cn } from "@/lib/utils";
 import { isNavItemActive } from "./nav-items";
+
+function AddExpenseFab({ onClick, disabled }: { onClick?: () => void; disabled?: boolean }) {
+  return (
+    <button
+      aria-label="Add expense"
+      onClick={onClick}
+      disabled={disabled}
+      className="-mt-6 flex h-14 w-14 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/25 transition active:scale-95 disabled:cursor-default"
+    >
+      <Plus className="h-6 w-6" />
+    </button>
+  );
+}
+
+// AddExpenseFlow pulls in Dialog/Drawer/Checkbox/zod validation/category data
+// -- real weight that every single page was paying for in its critical
+// bundle just to render this one always-visible trigger. Loading it on
+// demand keeps that out of the initial JS every route ships; the fallback
+// renders the identical-looking button (just inert) so the FAB never
+// visibly changes, only becomes clickable a moment later.
+const AddExpenseFlow = dynamic(
+  () => import("@/components/expenses/add-expense-flow").then((mod) => mod.AddExpenseFlow),
+  { loading: () => <AddExpenseFab disabled /> }
+);
 
 const ITEMS = [
   { href: "/", label: "Home", icon: Home },
@@ -29,16 +53,7 @@ export function BottomNav() {
           if (!item) {
             return (
               <div key="add-expense-fab" className="flex items-center justify-center">
-                <AddExpenseFlow
-                  trigger={
-                    <button
-                      aria-label="Add expense"
-                      className="-mt-6 flex h-14 w-14 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/25 transition active:scale-95"
-                    >
-                      <Plus className="h-6 w-6" />
-                    </button>
-                  }
-                />
+                <AddExpenseFlow trigger={<AddExpenseFab />} />
               </div>
             );
           }

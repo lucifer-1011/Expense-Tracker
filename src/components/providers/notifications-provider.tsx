@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 import { createClient } from "@/lib/supabase/client";
 import { mapNotificationRow } from "@/lib/supabase/mappers";
+import { withSessionRetry } from "@/lib/supabase/with-session-retry";
 import type { Notification } from "@/types";
 import { useCurrentFlat } from "./flat-provider";
 
@@ -50,12 +51,14 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     setError(null);
     const supabase = createClient();
 
-    const { data, error: fetchError } = await supabase
-      .from("notifications")
-      .select("*")
-      .eq("flat_id", flat.id)
-      .eq("recipient_user_id", profile.id)
-      .order("created_at", { ascending: false });
+    const { data, error: fetchError } = await withSessionRetry(() =>
+      supabase
+        .from("notifications")
+        .select("*")
+        .eq("flat_id", flat.id)
+        .eq("recipient_user_id", profile.id)
+        .order("created_at", { ascending: false })
+    );
 
     if (fetchError) {
       setError(fetchError.message);

@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { calculateMemberBalances } from "@/lib/calculations/balances";
 import { generateSuggestedSettlements } from "@/lib/calculations/settlements";
 import { mapSettlementRequestRow, mapSettlementRow } from "@/lib/supabase/mappers";
+import { withSessionRetry } from "@/lib/supabase/with-session-retry";
 import type { MemberBalance, Settlement, SettlementMethod, SettlementRequest, SuggestedSettlement } from "@/types";
 import { useCurrentFlat } from "./flat-provider";
 import { useExpenses } from "./expenses-provider";
@@ -89,12 +90,16 @@ export function SettlementsProvider({ children }: { children: ReactNode }) {
     const supabase = createClient();
 
     const [{ data, error: fetchError }, { data: requestData, error: requestError }] = await Promise.all([
-      supabase.from("settlements").select("*").eq("flat_id", flat.id).order("settled_at", { ascending: false }),
-      supabase
-        .from("settlement_requests")
-        .select("*")
-        .eq("flat_id", flat.id)
-        .order("created_at", { ascending: false }),
+      withSessionRetry(() =>
+        supabase.from("settlements").select("*").eq("flat_id", flat.id).order("settled_at", { ascending: false })
+      ),
+      withSessionRetry(() =>
+        supabase
+          .from("settlement_requests")
+          .select("*")
+          .eq("flat_id", flat.id)
+          .order("created_at", { ascending: false })
+      ),
     ]);
 
     if (fetchError || requestError) {

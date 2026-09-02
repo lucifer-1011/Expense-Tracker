@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { createClient } from "@/lib/supabase/client";
 import { mapNotificationRow } from "@/lib/supabase/mappers";
@@ -9,9 +9,13 @@ import type { Notification } from "@/types";
 import { useCurrentFlat } from "./flat-provider";
 
 interface NotificationsContextValue {
-  /** True until the first fetch for the current flat resolves. */
+  /** True only until the first fetch for the current flat resolves -- a
+   * background refresh never flips this back to true, so it never hides
+   * already-correct data behind a full-page skeleton. */
   isLoading: boolean;
-  /** Set when the initial fetch fails; cleared on a successful refresh. */
+  /** Set only when there's no previously-loaded data to fall back on; a
+   * background refresh that fails leaves the last-known-good state in place
+   * instead of replacing it with an error screen. */
   error: string | null;
   /** Every notification addressed to the current user in this flat, newest first. */
   notifications: Notification[];
@@ -35,6 +39,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const load = useCallback(async () => {
     // See ExpensesProvider's identical guard: `flat`/`profile` still
@@ -47,7 +52,11 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setIsLoading(true);
+    // Only the very first load should block the UI with a skeleton -- a
+    // later call (AppRevalidator on visibility/online, pull-to-refresh) is
+    // refreshing data that's already correctly on screen.
+    const isInitialLoad = !hasLoadedRef.current;
+    if (isInitialLoad) setIsLoading(true);
     setError(null);
     const supabase = createClient();
 
@@ -61,13 +70,18 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     );
 
     if (fetchError) {
-      setError(fetchError.message);
-      setNotifications([]);
+      // A background refresh failing shouldn't blank out data that's
+      // already correctly displayed -- only surface it if we have nothing.
+      if (isInitialLoad) {
+        setError(fetchError.message);
+        setNotifications([]);
+      }
       setIsLoading(false);
       return;
     }
 
     setNotifications((data ?? []).map(mapNotificationRow));
+    hasLoadedRef.current = true;
     setIsLoading(false);
   }, [flat, flatLoading, profile]);
 

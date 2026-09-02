@@ -4,6 +4,30 @@ import { cloneElement, isValidElement, useMemo, useState, type ChangeEvent, type
 import { X } from "lucide-react";
 import { toast } from "sonner";
 
+const PENDING_EXPENSE_KEY_STORAGE_KEY = "flatsplit:pending-expense-key";
+
+/**
+ * One UUID per logical "add expense" attempt, persisted in sessionStorage so
+ * it survives a refresh mid-submission -- if the earlier request actually
+ * reached the server, a resubmit with the same key safely resolves to that
+ * same row via the database's unique constraint (ExpensesProvider.addExpense)
+ * instead of creating a duplicate.
+ */
+function getOrCreatePendingExpenseKey(): string {
+  if (typeof window === "undefined") return crypto.randomUUID();
+  const existing = window.sessionStorage.getItem(PENDING_EXPENSE_KEY_STORAGE_KEY);
+  if (existing) return existing;
+  const key = crypto.randomUUID();
+  window.sessionStorage.setItem(PENDING_EXPENSE_KEY_STORAGE_KEY, key);
+  return key;
+}
+
+function clearPendingExpenseKey(): void {
+  if (typeof window !== "undefined") {
+    window.sessionStorage.removeItem(PENDING_EXPENSE_KEY_STORAGE_KEY);
+  }
+}
+
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
@@ -113,6 +137,9 @@ function FlowContent({
   const { activeMembers, members, membership } = useCurrentFlat();
   const { addExpense, updateExpense } = useExpenses();
   const isEditing = Boolean(expense);
+  // Only a new expense needs a dedupe key -- editing targets an existing row
+  // by id, so a double-submitted update can't create a duplicate expense.
+  const [dedupeKey] = useState(() => (isEditing ? null : getOrCreatePendingExpenseKey()));
 
   const pickableMembers = useMemo(() => {
     if (!expense) return activeMembers;
@@ -228,6 +255,7 @@ function FlowContent({
       paidByFlatMemberId,
       splitType,
       splits,
+      ...(dedupeKey ? { dedupeKey } : {}),
     };
 
     setFormError(null);
@@ -238,6 +266,9 @@ function FlowContent({
         toast.success("Expense updated");
       } else {
         await addExpense(input);
+        // This logical expense is now safely persisted -- free the key so a
+        // genuinely new expense opened next doesn't reuse it.
+        clearPendingExpenseKey();
         toast.success("Expense added");
       }
       onDone();

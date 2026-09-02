@@ -20,8 +20,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { MemberAvatar } from "@/components/shared/member-avatar";
 import { useCurrentFlat } from "@/hooks/use-current-flat";
 import { useSettlements } from "@/hooks/use-settlements";
+import { allocateAmountAcrossItems } from "@/lib/calculations/expense-settlements";
 import { settlementFormSchema } from "@/lib/validations/settlement";
-import type { FlatMember, SettlementMethod, SuggestedSettlement } from "@/types";
+import type { ExpenseSettlementGroup, FlatMember, SettlementMethod } from "@/types";
 
 const METHOD_LABELS: Record<SettlementMethod, string> = {
   upi: "UPI",
@@ -31,11 +32,11 @@ const METHOD_LABELS: Record<SettlementMethod, string> = {
 };
 
 export function SettleUpDialog({
-  suggestion,
+  group,
   open,
   onOpenChange,
 }: {
-  suggestion: SuggestedSettlement | null;
+  group: ExpenseSettlementGroup | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -44,7 +45,12 @@ export function SettleUpDialog({
   // debt -- when *they* are the one submitting this form, it creates a pending
   // request instead (see SettleUpForm). The receiver marking a payment they
   // themselves received needs no one else's approval, so that path stays instant.
-  const isDebtor = Boolean(suggestion && membership && suggestion.fromFlatMemberId === membership.id);
+  const isDebtor = Boolean(group && membership && !group.youAreOwed);
+  // Items with a request already in flight can't be touched by this action --
+  // re-requesting the same expense would just hit the one-pending-per-expense
+  // constraint. Skipped here so the amount/allocation only ever covers what
+  // this action can actually affect.
+  const actionableItems = group?.items.filter((i) => !i.pendingRequestId) ?? [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -52,15 +58,18 @@ export function SettleUpDialog({
         <DialogHeader>
           <DialogTitle>Settle up</DialogTitle>
           <DialogDescription>
+            {group ? `For "${group.title}"${group.items.length > 1 ? ` (${group.items.length} expenses)` : ""}. ` : ""}
             {isDebtor
               ? "Sending this doesn't settle your balance right away -- the person you paid needs to confirm it first."
               : "Record this payment between flatmates."}
           </DialogDescription>
         </DialogHeader>
-        {suggestion && (
+        {group && membership && actionableItems.length > 0 && (
           <SettleUpForm
-            key={`${suggestion.fromFlatMemberId}-${suggestion.toFlatMemberId}-${suggestion.amountPaise}`}
-            suggestion={suggestion}
+            key={group.key}
+            items={actionableItems}
+            fromFlatMemberId={group.youAreOwed ? group.counterpartFlatMemberId : membership.id}
+            toFlatMemberId={group.youAreOwed ? membership.id : group.counterpartFlatMemberId}
             isDebtor={isDebtor}
             onDone={() => onOpenChange(false)}
           />
@@ -71,29 +80,36 @@ export function SettleUpDialog({
 }
 
 /**
- * Keyed by the suggestion's identity from the parent, so state resets for a
- * new suggestion without needing an effect + setState on prop change.
+ * Keyed by the group's identity from the parent, so state resets for a new
+ * group without needing an effect + setState on prop change. `items` is
+ * always the actionable (non-pending) subset of one group's underlying
+ * expenses, oldest first.
  */
 function SettleUpForm({
-  suggestion,
+  items,
+  fromFlatMemberId,
+  toFlatMemberId,
   isDebtor,
   onDone,
 }: {
-  suggestion: SuggestedSettlement;
+  items: { expenseId: string; amountPaise: number }[];
+  fromFlatMemberId: string;
+  toFlatMemberId: string;
   isDebtor: boolean;
   onDone: () => void;
 }) {
   const { members } = useCurrentFlat();
   const { recordSettlement, requestSettlement } = useSettlements();
   const getMember = (flatMemberId: string) => members.find((m) => m.id === flatMemberId);
-  const [amountRupees, setAmountRupees] = useState(() => (suggestion.amountPaise / 100).toString());
+  const actionableTotalPaise = items.reduce((sum, i) => sum + i.amountPaise, 0);
+  const [amountRupees, setAmountRupees] = useState(() => (actionableTotalPaise / 100).toString());
   const [method, setMethod] = useState<SettlementMethod>("upi");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const fromMember = getMember(suggestion.fromFlatMemberId);
-  const toMember = getMember(suggestion.toFlatMemberId);
+  const fromMember = getMember(fromFlatMemberId);
+  const toMember = getMember(toFlatMemberId);
   if (!fromMember || !toMember) return null;
 
   const from: FlatMember = fromMember;
@@ -114,27 +130,46 @@ function SettleUpForm({
       return;
     }
 
+    const enteredPaise = Math.round(parsed.data.amountRupees * 100);
+    // Only cap when splitting across more than one expense -- a single
+    // expense keeps the existing, more permissive behavior (e.g. deliberately
+    // rounding up or overpaying), since there's nowhere ambiguous for the
+    // extra to go.
+    if (items.length > 1 && enteredPaise > actionableTotalPaise) {
+      setError(`Amount can't exceed ₹${(actionableTotalPaise / 100).toLocaleString("en-IN")}`);
+      return;
+    }
+
+    const allocations = allocateAmountAcrossItems(items, enteredPaise);
+
     setError(null);
     setIsSubmitting(true);
     try {
-      if (isDebtor) {
-        await requestSettlement({
-          receiverFlatMemberId: to.id,
-          amountPaise: Math.round(parsed.data.amountRupees * 100),
-          method: parsed.data.method,
-          note: parsed.data.note,
-        });
-        toast.success(`Settlement request sent to ${to.name}. Your balance will update once they confirm.`);
-      } else {
-        await recordSettlement({
-          fromFlatMemberId: from.id,
-          toFlatMemberId: to.id,
-          amountPaise: Math.round(parsed.data.amountRupees * 100),
-          method: parsed.data.method,
-          note: parsed.data.note,
-        });
-        toast.success(`Marked ${from.name} → ${to.name} as settled`);
+      for (const allocation of allocations) {
+        if (isDebtor) {
+          await requestSettlement({
+            receiverFlatMemberId: to.id,
+            amountPaise: allocation.amountPaise,
+            method: parsed.data.method,
+            note: parsed.data.note,
+            expenseId: allocation.expenseId,
+          });
+        } else {
+          await recordSettlement({
+            fromFlatMemberId: from.id,
+            toFlatMemberId: to.id,
+            amountPaise: allocation.amountPaise,
+            method: parsed.data.method,
+            note: parsed.data.note,
+            expenseId: allocation.expenseId,
+          });
+        }
       }
+      toast.success(
+        isDebtor
+          ? `Settlement request sent to ${to.name}. Your balance will update once they confirm.`
+          : `Marked ${from.name} → ${to.name} as settled`
+      );
       onDone();
     } catch (err) {
       setError(

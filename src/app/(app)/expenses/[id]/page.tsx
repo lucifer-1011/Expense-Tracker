@@ -128,24 +128,26 @@ export default function ExpenseDetailPage() {
           </div>
         </div>
 
-        <div className="mt-6 flex gap-2">
-          <Button
-            variant="outline"
-            className="h-12 flex-1 cursor-pointer rounded-full"
-            onClick={() => setEditOpen(true)}
-          >
-            <Pencil className="h-4 w-4" />
-            Edit
-          </Button>
-          <Button
-            variant="destructive"
-            className="h-12 flex-1 cursor-pointer rounded-full"
-            onClick={() => setDeleteOpen(true)}
-          >
-            <Trash2 className="h-4 w-4" />
-            Delete
-          </Button>
-        </div>
+        {isMePaying && (
+          <div className="mt-6 flex gap-2">
+            <Button
+              variant="outline"
+              className="h-12 flex-1 cursor-pointer rounded-full"
+              onClick={() => setEditOpen(true)}
+            >
+              <Pencil className="h-4 w-4" />
+              Edit
+            </Button>
+            <Button
+              variant="destructive"
+              className="h-12 flex-1 cursor-pointer rounded-full"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </Button>
+          </div>
+        )}
       </div>
 
       <div>

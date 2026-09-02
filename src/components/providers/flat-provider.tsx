@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { createClient } from "@/lib/supabase/client";
 import { withSessionRetry } from "@/lib/supabase/with-session-retry";
@@ -26,9 +26,13 @@ export interface CurrentMembership {
 }
 
 interface FlatContextValue {
-  /** True until the first fetch resolves. */
+  /** True only until the first fetch resolves -- a background refresh never
+   * flips this back to true, so it never hides already-correct data behind
+   * a full-page skeleton. */
   isLoading: boolean;
-  /** Set when the most recent fetch failed; cleared on a successful refresh. */
+  /** Set only when there's no previously-loaded data to fall back on; a
+   * background refresh that fails leaves the last-known-good state in place
+   * instead of replacing it with an error screen. */
   error: string | null;
   profile: CurrentProfile | null;
   flat: CurrentFlat | null;
@@ -43,6 +47,9 @@ interface FlatContextValue {
   markMemberInactive: (flatMemberId: string) => Promise<void>;
   /** Owner-only: renames the current flat (flats_update_owner RLS policy). */
   updateFlatName: (name: string) => Promise<void>;
+  /** Renames the caller's own display name (profiles_update_own RLS policy --
+   * a user can only ever update the profile row matching their own auth id). */
+  updateDisplayName: (name: string) => Promise<void>;
 }
 
 const FlatContext = createContext<FlatContextValue | null>(null);
@@ -62,6 +69,7 @@ export function FlatProvider({ children }: { children: ReactNode }) {
   const [flat, setFlat] = useState<CurrentFlat | null>(null);
   const [membership, setMembership] = useState<CurrentMembership | null>(null);
   const [members, setMembers] = useState<FlatMember[]>([]);
+  const hasLoadedRef = useRef(false);
 
   const load = useCallback(async () => {
     // AuthProvider's own initial session check hasn't resolved yet, so `user`
@@ -81,7 +89,11 @@ export function FlatProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setIsLoading(true);
+    // Only the very first load should block the UI with a skeleton -- a
+    // later call (AppRevalidator on visibility/online, pull-to-refresh) is
+    // refreshing data that's already correctly on screen.
+    const isInitialLoad = !hasLoadedRef.current;
+    if (isInitialLoad) setIsLoading(true);
     setError(null);
     const supabase = createClient();
 
@@ -110,7 +122,11 @@ export function FlatProvider({ children }: { children: ReactNode }) {
     // would incorrectly bounce an already-onboarded, still-signed-in user.
     // Consumers that care (e.g. the Members page) surface `error` themselves.
     if (profileError || membershipError) {
-      setError((profileError ?? membershipError)?.message ?? "Couldn't load your flat.");
+      // A background refresh failing shouldn't blank out data that's already
+      // correctly displayed -- only surface it if we have nothing yet.
+      if (isInitialLoad) {
+        setError((profileError ?? membershipError)?.message ?? "Couldn't load your flat.");
+      }
       setIsLoading(false);
       return;
     }
@@ -138,7 +154,9 @@ export function FlatProvider({ children }: { children: ReactNode }) {
       );
 
       if (membersError) {
-        setError(membersError.message);
+        if (isInitialLoad) {
+          setError(membersError.message);
+        }
         setIsLoading(false);
         return;
       }
@@ -155,6 +173,7 @@ export function FlatProvider({ children }: { children: ReactNode }) {
       setMembers([]);
     }
 
+    hasLoadedRef.current = true;
     setIsLoading(false);
   }, [user, authLoading]);
 
@@ -191,6 +210,27 @@ export function FlatProvider({ children }: { children: ReactNode }) {
     setFlat({ id: data.id, name: data.name, inviteCode: data.invite_code });
   }, [flat?.id]);
 
+  const updateDisplayName = useCallback(async (name: string) => {
+    const supabase = createClient();
+    const { data, error: updateError } = await supabase
+      .from("profiles")
+      .update({ display_name: name })
+      .eq("id", profile?.id ?? "")
+      .select("id, display_name, avatar_url")
+      .single();
+
+    if (updateError || !data) {
+      throw new Error(updateError?.message ?? "Couldn't update your display name.");
+    }
+
+    setProfile({ id: data.id, displayName: data.display_name, avatarUrl: data.avatar_url });
+    // Keep the roster in sync too -- it's how expenses/settlements/activity
+    // resolve a member's name (see mapFlatMemberRow), not `profile` directly.
+    setMembers((prev) =>
+      prev.map((m) => (m.profileId === data.id ? { ...m, name: data.display_name } : m))
+    );
+  }, [profile?.id]);
+
   useEffect(() => {
     // Deferred a tick so the fetch-triggering call sits outside the effect's
     // own synchronous body.
@@ -214,6 +254,7 @@ export function FlatProvider({ children }: { children: ReactNode }) {
         refresh: load,
         markMemberInactive,
         updateFlatName,
+        updateDisplayName,
       }}
     >
       {children}

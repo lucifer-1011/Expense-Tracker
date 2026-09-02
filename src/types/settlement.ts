@@ -9,6 +9,8 @@ export interface Settlement {
   method: SettlementMethod;
   date: string;
   note?: string;
+  /** The specific expense this settles, if any -- absent for a general settle-up. */
+  expenseId?: string;
 }
 
 export type SettlementRequestStatus = "pending" | "approved" | "rejected";
@@ -34,4 +36,6 @@ export interface SettlementRequest {
   createdAt: string;
   resolvedAt?: string;
   resolvedBy?: string;
+  /** The specific expense this settles, if any -- absent for a general settle-up. */
+  expenseId?: string;
 }

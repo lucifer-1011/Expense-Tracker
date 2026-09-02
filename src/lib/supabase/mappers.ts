@@ -93,6 +93,7 @@ export function mapSettlementRow(row: SettlementRow): Settlement {
     method: row.method as SettlementMethod,
     date: row.settled_at,
     note: row.notes ?? undefined,
+    expenseId: row.expense_id ?? undefined,
   };
 }
 
@@ -130,5 +131,6 @@ export function mapSettlementRequestRow(row: SettlementRequestRow): SettlementRe
     createdAt: row.created_at,
     resolvedAt: row.resolved_at ?? undefined,
     resolvedBy: row.resolved_by ?? undefined,
+    expenseId: row.expense_id ?? undefined,
   };
 }

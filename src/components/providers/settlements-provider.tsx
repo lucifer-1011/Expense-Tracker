@@ -1,14 +1,23 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
 import { calculateMemberBalances } from "@/lib/calculations/balances";
+import { getExpenseSettlementItems, groupExpenseSettlementItems } from "@/lib/calculations/expense-settlements";
 import { generateSuggestedSettlements } from "@/lib/calculations/settlements";
 import { mapSettlementRequestRow, mapSettlementRow } from "@/lib/supabase/mappers";
 import { withSessionRetry } from "@/lib/supabase/with-session-retry";
-import type { MemberBalance, Settlement, SettlementMethod, SettlementRequest, SuggestedSettlement } from "@/types";
+import type {
+  ExpenseSettlementGroup,
+  ExpenseSettlementItem,
+  MemberBalance,
+  Settlement,
+  SettlementMethod,
+  SettlementRequest,
+  SuggestedSettlement,
+} from "@/types";
 import { useCurrentFlat } from "./flat-provider";
 import { useExpenses } from "./expenses-provider";
 
@@ -18,6 +27,8 @@ export interface SettlementInput {
   amountPaise: number;
   method: SettlementMethod;
   note?: string;
+  /** The specific expense this settles, if any -- omit for a general settle-up. */
+  expenseId?: string;
 }
 
 export interface SettlementRequestInput {
@@ -25,18 +36,28 @@ export interface SettlementRequestInput {
   amountPaise: number;
   method: SettlementMethod;
   note?: string;
+  /** The specific expense this settles, if any -- omit for a general settle-up. */
+  expenseId?: string;
 }
 
 interface SettlementsContextValue {
-  /** True until the first fetch for the current flat resolves. */
+  /** True only until the first fetch for the current flat resolves -- a
+   * background refresh never flips this back to true, so it never hides
+   * already-correct data behind a full-page skeleton. */
   isLoading: boolean;
-  /** Set when the initial fetch fails; cleared on a successful refresh. */
+  /** Set only when there's no previously-loaded data to fall back on; a
+   * background refresh that fails leaves the last-known-good state in place
+   * instead of replacing it with an error screen. */
   error: string | null;
   settlements: Settlement[];
   /** Every settlement request (any status) the current user is a party to, newest first. */
   settlementRequests: SettlementRequest[];
   balances: MemberBalance[];
   suggestedSettlements: SuggestedSettlement[];
+  /** Still-outstanding amounts owed with the current user, one per expense -- never netted across expenses. */
+  expenseSettlementItems: ExpenseSettlementItem[];
+  /** expenseSettlementItems grouped by purpose (same title + counterpart + direction) for display. */
+  expenseSettlementGroups: ExpenseSettlementGroup[];
   /** Creditor-direct: records a settlement immediately, no approval needed -- the receiver asserting their own receipt of money requires no one else's sign-off. */
   recordSettlement: (input: SettlementInput) => Promise<Settlement>;
   /** Debtor-initiated: creates a pending request. Does NOT affect balances until the receiver approves it. */
@@ -66,12 +87,13 @@ const SettlementsContext = createContext<SettlementsContextValue | null>(null);
  */
 export function SettlementsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const { flat, isLoading: flatLoading, members, activeMembers } = useCurrentFlat();
+  const { flat, isLoading: flatLoading, members, activeMembers, membership } = useCurrentFlat();
   const { expenses } = useExpenses();
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [settlementRequests, setSettlementRequests] = useState<SettlementRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const load = useCallback(async () => {
     // See ExpensesProvider's identical guard: `flat` still resolving isn't
@@ -85,7 +107,11 @@ export function SettlementsProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setIsLoading(true);
+    // Only the very first load should block the UI with a skeleton -- a
+    // later call (AppRevalidator on visibility/online, pull-to-refresh) is
+    // refreshing data that's already correctly on screen.
+    const isInitialLoad = !hasLoadedRef.current;
+    if (isInitialLoad) setIsLoading(true);
     setError(null);
     const supabase = createClient();
 
@@ -103,15 +129,20 @@ export function SettlementsProvider({ children }: { children: ReactNode }) {
     ]);
 
     if (fetchError || requestError) {
-      setError((fetchError ?? requestError)?.message ?? "Couldn't load settlements.");
-      setSettlements([]);
-      setSettlementRequests([]);
+      // A background refresh failing shouldn't blank out data that's
+      // already correctly displayed -- only surface it if we have nothing.
+      if (isInitialLoad) {
+        setError((fetchError ?? requestError)?.message ?? "Couldn't load settlements.");
+        setSettlements([]);
+        setSettlementRequests([]);
+      }
       setIsLoading(false);
       return;
     }
 
     setSettlements((data ?? []).map(mapSettlementRow));
     setSettlementRequests((requestData ?? []).map(mapSettlementRequestRow));
+    hasLoadedRef.current = true;
     setIsLoading(false);
   }, [flat, flatLoading]);
 
@@ -135,6 +166,7 @@ export function SettlementsProvider({ children }: { children: ReactNode }) {
           method: input.method,
           notes: input.note ?? null,
           created_by: user?.id ?? null,
+          expense_id: input.expenseId ?? null,
         })
         .select()
         .single();
@@ -160,6 +192,7 @@ export function SettlementsProvider({ children }: { children: ReactNode }) {
         amount_paise: input.amountPaise,
         method: input.method,
         note: input.note,
+        p_expense_id: input.expenseId,
       })
       .select()
       .single();
@@ -222,6 +255,16 @@ export function SettlementsProvider({ children }: { children: ReactNode }) {
     [balances, activeMembers]
   );
 
+  const expenseSettlementItems = useMemo(
+    () => getExpenseSettlementItems(membership?.id ?? "", expenses, settlements, settlementRequests),
+    [membership?.id, expenses, settlements, settlementRequests]
+  );
+
+  const expenseSettlementGroups = useMemo(
+    () => groupExpenseSettlementItems(expenseSettlementItems),
+    [expenseSettlementItems]
+  );
+
   return (
     <SettlementsContext.Provider
       value={{
@@ -231,6 +274,8 @@ export function SettlementsProvider({ children }: { children: ReactNode }) {
         settlementRequests,
         balances,
         suggestedSettlements,
+        expenseSettlementItems,
+        expenseSettlementGroups,
         recordSettlement,
         requestSettlement,
         approveSettlementRequest,

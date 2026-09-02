@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check } from "lucide-react";
-import Link from "next/link";
+import { Check, ChevronDown } from "lucide-react";
 
 import { MemberAvatar } from "@/components/shared/member-avatar";
 import { Button } from "@/components/ui/button";
@@ -10,31 +9,33 @@ import { SettleUpDialog } from "@/components/settlements/settle-up-dialog";
 import { useCurrentFlat } from "@/hooks/use-current-flat";
 import { useSettlements } from "@/hooks/use-settlements";
 import { useCountUp } from "@/hooks/use-count-up";
-import { getMemberBalance } from "@/lib/calculations/balances";
 import { formatPaise } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { FlatMember, SuggestedSettlement } from "@/types";
+import type { ExpenseSettlementGroup, FlatMember } from "@/types";
 
-interface CounterpartRow {
-  settlement: SuggestedSettlement;
+interface SettlementGroupRow {
+  group: ExpenseSettlementGroup;
   member: FlatMember;
 }
 
 const MAX_VISIBLE = 2;
 
 /**
- * One uniform row-card per relationship: avatar + name + status on the
- * left, amount (the main emphasis) stacked above a compact action button
- * on the right. Every card shares the same structure/padding/height, so a
- * list of them reads as one consistent grid rather than mismatched rows.
+ * One uniform row-card per purpose (a group of one or more same-purpose
+ * expenses with the same counterpart): the purpose/title is the primary
+ * label, the counterpart's name is secondary context, and the amount stays
+ * the main visual emphasis on the right, stacked above a compact action
+ * button.
  */
 function SettlementCard({
+  title,
   youAreOwed,
   member,
   amountPaise,
   isPending,
   onAction,
 }: {
+  title: string;
   youAreOwed: boolean;
   member: FlatMember;
   amountPaise: number;
@@ -48,9 +49,9 @@ function SettlementCard({
       <MemberAvatar member={member} size="md" />
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-foreground">{member.name}</p>
+        <p className="truncate text-sm font-semibold text-foreground">{title}</p>
         <p className="mt-0.5 truncate text-xs text-muted-foreground">
-          {youAreOwed ? "Owes you" : `You owe ${member.name}`}
+          {youAreOwed ? `${member.name} owes you` : `You owe ${member.name}`}
         </p>
       </div>
 
@@ -78,41 +79,28 @@ function SettlementCard({
 }
 
 /**
- * The only actionable section on Home. A member's net balance points one
- * direction only (owing out or being owed, never both), so this always
- * renders cards for a single direction. Every color here is a theme token;
- * cards use the app's existing subtle card surface (bg-card + ring), never
- * a semantic-colored fill -- only the amount text carries direction color.
+ * The only actionable section on Home. Unlike a net per-person balance, a
+ * member can simultaneously owe on one purpose and be owed on another, so
+ * this renders one card per still-outstanding purpose, in either direction
+ * -- never netted together. Every color here is a theme token; cards use
+ * the app's existing subtle card surface (bg-card + ring), never a
+ * semantic-colored fill -- only the amount text carries direction color.
  */
 export function SettlementActions() {
-  const { members, membership } = useCurrentFlat();
-  const { balances, suggestedSettlements, settlementRequests } = useSettlements();
-  const [active, setActive] = useState<SuggestedSettlement | null>(null);
-
-  const currentMemberId = membership?.id ?? "";
-  const balance = getMemberBalance(balances, currentMemberId);
-  const youAreOwed = balance.netBalancePaise > 0;
+  const { members } = useCurrentFlat();
+  const { expenseSettlementGroups } = useSettlements();
+  const [active, setActive] = useState<ExpenseSettlementGroup | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   const getMember = (flatMemberId: string) => members.find((m) => m.id === flatMemberId);
-  const pending = settlementRequests.filter((r) => r.status === "pending");
-  const pendingBetween = (otherId: string) =>
-    pending.find(
-      (r) =>
-        (r.payerFlatMemberId === currentMemberId && r.receiverFlatMemberId === otherId) ||
-        (r.receiverFlatMemberId === currentMemberId && r.payerFlatMemberId === otherId)
-    );
 
-  const rows: CounterpartRow[] = suggestedSettlements
-    .filter((s) => (youAreOwed ? s.toFlatMemberId === currentMemberId : s.fromFlatMemberId === currentMemberId))
-    .map((settlement) => ({
-      settlement,
-      member: getMember(youAreOwed ? settlement.fromFlatMemberId : settlement.toFlatMemberId),
-    }))
-    .filter((row): row is CounterpartRow => Boolean(row.member))
-    .sort((a, b) => b.settlement.amountPaise - a.settlement.amountPaise);
+  const rows: SettlementGroupRow[] = expenseSettlementGroups
+    .map((group) => ({ group, member: getMember(group.counterpartFlatMemberId) }))
+    .filter((row): row is SettlementGroupRow => Boolean(row.member))
+    .sort((a, b) => b.group.amountPaise - a.group.amountPaise);
 
-  const visible = rows.slice(0, MAX_VISIBLE);
-  const hasMore = rows.length > visible.length;
+  const hasMore = rows.length > MAX_VISIBLE;
+  const visible = expanded ? rows : rows.slice(0, MAX_VISIBLE);
 
   if (rows.length === 0) {
     return (
@@ -126,28 +114,31 @@ export function SettlementActions() {
   return (
     <div className="px-[22px] py-[26px]">
       <div className="space-y-3">
-        {visible.map(({ settlement, member }) => (
+        {visible.map(({ group, member }) => (
           <SettlementCard
-            key={`${settlement.fromFlatMemberId}-${settlement.toFlatMemberId}`}
-            youAreOwed={youAreOwed}
+            key={group.key}
+            title={group.title}
+            youAreOwed={group.youAreOwed}
             member={member}
-            amountPaise={settlement.amountPaise}
-            isPending={Boolean(pendingBetween(member.id))}
-            onAction={() => setActive(settlement)}
+            amountPaise={group.amountPaise}
+            isPending={group.isPending}
+            onAction={() => setActive(group)}
           />
         ))}
       </div>
 
       {hasMore && (
-        <Link
-          href="/members"
-          className="mt-4 block text-[13px] text-muted-foreground underline underline-offset-2 transition-colors hover:text-foreground"
+        <button
+          type="button"
+          onClick={() => setExpanded((prev) => !prev)}
+          className="mt-4 flex cursor-pointer items-center gap-1 text-[13px] text-muted-foreground underline underline-offset-2 transition-colors hover:text-foreground"
         >
-          View all {rows.length} balances
-        </Link>
+          {expanded ? "Show less" : `View all ${rows.length} balances`}
+          <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-180")} />
+        </button>
       )}
 
-      <SettleUpDialog suggestion={active} open={Boolean(active)} onOpenChange={(open) => !open && setActive(null)} />
+      <SettleUpDialog group={active} open={Boolean(active)} onOpenChange={(open) => !open && setActive(null)} />
     </div>
   );
 }

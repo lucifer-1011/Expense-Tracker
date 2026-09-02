@@ -6,6 +6,7 @@ import { ChevronRight, Copy, LogOut, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 import { InviteMemberDialog } from "@/components/members/invite-member-dialog";
+import { EditDisplayNameDialog } from "@/components/profile/edit-display-name-dialog";
 import { EditFlatNameDialog } from "@/components/profile/edit-flat-name-dialog";
 import { ErrorState } from "@/components/shared/error-state";
 import { ListSkeleton } from "@/components/shared/list-skeleton";
@@ -18,7 +19,8 @@ import { useCurrentFlat } from "@/components/providers/flat-provider";
 export default function ProfilePage() {
   const { signOut } = useAuth();
   const { profile, flat, membership, activeMemberCount, isLoading, error, refresh } = useCurrentFlat();
-  const [editNameOpen, setEditNameOpen] = useState(false);
+  const [editFlatNameOpen, setEditFlatNameOpen] = useState(false);
+  const [editDisplayNameOpen, setEditDisplayNameOpen] = useState(false);
   const isOwner = membership?.role === "owner";
 
   async function handleCopy() {
@@ -67,12 +69,34 @@ export default function ProfilePage() {
       </div>
 
       <section>
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Profile</p>
+        <div className="mt-2 divide-y divide-border">
+          <button
+            type="button"
+            onClick={() => setEditDisplayNameOpen(true)}
+            className="flex w-full cursor-pointer items-center justify-between py-3.5 text-sm"
+          >
+            <span className="text-muted-foreground">Display name</span>
+            <span className="flex items-center gap-1.5 font-medium text-foreground">
+              {profile.displayName}
+              <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+            </span>
+          </button>
+        </div>
+        <EditDisplayNameDialog
+          open={editDisplayNameOpen}
+          onOpenChange={setEditDisplayNameOpen}
+          currentName={profile.displayName}
+        />
+      </section>
+
+      <section>
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Flat</p>
         <div className="mt-2 divide-y divide-border">
           {isOwner ? (
             <button
               type="button"
-              onClick={() => setEditNameOpen(true)}
+              onClick={() => setEditFlatNameOpen(true)}
               className="flex w-full cursor-pointer items-center justify-between py-3.5 text-sm"
             >
               <span className="text-muted-foreground">Flat name</span>
@@ -119,7 +143,7 @@ export default function ProfilePage() {
         />
 
         {isOwner && (
-          <EditFlatNameDialog open={editNameOpen} onOpenChange={setEditNameOpen} currentName={flat.name} />
+          <EditFlatNameDialog open={editFlatNameOpen} onOpenChange={setEditFlatNameOpen} currentName={flat.name} />
         )}
       </section>
 

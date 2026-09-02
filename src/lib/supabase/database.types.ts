@@ -1,17 +1,3 @@
-/**
- * Auto-generated from the live linked Supabase project -- do not hand-edit.
- * Regenerate after any schema change with:
- *   supabase gen types typescript --linked > src/lib/supabase/database.types.ts
- *
- * Columns backed by a CHECK constraint (expenses.category, expenses.split_type,
- * flat_members.role, settlements.method, settlement_requests.method,
- * settlement_requests.status, notifications.type) come back as plain `string`
- * here, since Postgres CHECK constraints aren't reflected as enum types.
- * src/lib/supabase/mappers.ts narrows them to the literal union types declared
- * in src/types -- that's the "generated/raw DB type" <-> "domain type"
- * boundary for this project.
- */
-
 export type Json =
   | string
   | number
@@ -24,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.15"
+    PostgrestVersion: "14.5"
   }
   graphql_public: {
     Tables: {
@@ -96,6 +82,7 @@ export type Database = {
         Row: {
           amount_paise: number
           category: string
+          client_dedupe_key: string | null
           created_at: string
           created_by: string | null
           description: string | null
@@ -110,6 +97,7 @@ export type Database = {
         Insert: {
           amount_paise: number
           category: string
+          client_dedupe_key?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -124,6 +112,7 @@ export type Database = {
         Update: {
           amount_paise?: number
           category?: string
+          client_dedupe_key?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -349,6 +338,7 @@ export type Database = {
           amount_paise: number
           created_at: string
           created_by: string | null
+          expense_id: string | null
           flat_id: string
           id: string
           method: string
@@ -364,6 +354,7 @@ export type Database = {
           amount_paise: number
           created_at?: string
           created_by?: string | null
+          expense_id?: string | null
           flat_id: string
           id?: string
           method?: string
@@ -379,6 +370,7 @@ export type Database = {
           amount_paise?: number
           created_at?: string
           created_by?: string | null
+          expense_id?: string | null
           flat_id?: string
           id?: string
           method?: string
@@ -396,6 +388,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlement_requests_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
             referencedColumns: ["id"]
           },
           {
@@ -440,6 +439,7 @@ export type Database = {
           amount_paise: number
           created_at: string
           created_by: string | null
+          expense_id: string | null
           flat_id: string
           from_member_id: string
           id: string
@@ -452,6 +452,7 @@ export type Database = {
           amount_paise: number
           created_at?: string
           created_by?: string | null
+          expense_id?: string | null
           flat_id: string
           from_member_id: string
           id?: string
@@ -464,6 +465,7 @@ export type Database = {
           amount_paise?: number
           created_at?: string
           created_by?: string | null
+          expense_id?: string | null
           flat_id?: string
           from_member_id?: string
           id?: string
@@ -478,6 +480,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlements_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
             referencedColumns: ["id"]
           },
           {
@@ -514,6 +523,7 @@ export type Database = {
           amount_paise: number
           created_at: string
           created_by: string | null
+          expense_id: string | null
           flat_id: string
           from_member_id: string
           id: string
@@ -551,12 +561,14 @@ export type Database = {
           amount_paise: number
           method?: string
           note?: string
+          p_expense_id?: string
           receiver_member_id: string
         }
         Returns: {
           amount_paise: number
           created_at: string
           created_by: string | null
+          expense_id: string | null
           flat_id: string
           id: string
           method: string
@@ -578,6 +590,10 @@ export type Database = {
       generate_invite_code: { Args: never; Returns: string }
       is_active_flat_member: {
         Args: { target_flat_id: string }
+        Returns: boolean
+      }
+      is_expense_payer: {
+        Args: { target_expense_id: string }
         Returns: boolean
       }
       is_flat_member: { Args: { target_flat_id: string }; Returns: boolean }
@@ -618,12 +634,86 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      // Hand-added to match supabase/migrations/20260902000002_expense_split_integrity.sql.
+      // Regenerate this file with `supabase gen types typescript --linked`
+      // once that migration is applied, and these entries will be produced
+      // automatically.
+      create_expense_with_splits: {
+        Args: {
+          p_flat_id: string
+          p_title: string
+          p_description: string | null
+          p_category: string
+          p_amount_paise: number
+          p_expense_date: string
+          p_split_type: string
+          p_paid_by: string
+          p_splits: Json
+          p_dedupe_key?: string
+        }
+        Returns: {
+          amount_paise: number
+          category: string
+          client_dedupe_key: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          expense_date: string
+          flat_id: string
+          id: string
+          paid_by: string
+          split_type: string
+          title: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "expenses"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      update_expense_with_splits: {
+        Args: {
+          p_expense_id: string
+          p_title: string
+          p_description: string | null
+          p_category: string
+          p_amount_paise: number
+          p_expense_date: string
+          p_split_type: string
+          p_paid_by: string
+          p_splits: Json
+        }
+        Returns: {
+          amount_paise: number
+          category: string
+          client_dedupe_key: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          expense_date: string
+          flat_id: string
+          id: string
+          paid_by: string
+          split_type: string
+          title: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "expenses"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       reject_settlement_request: {
         Args: { request_id: string }
         Returns: {
           amount_paise: number
           created_at: string
           created_by: string | null
+          expense_id: string | null
           flat_id: string
           id: string
           method: string

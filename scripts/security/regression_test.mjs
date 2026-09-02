@@ -45,15 +45,27 @@ const {error:s2e}=await bob.c.from("expense_splits").insert([
   {expense_id:e2.id,member_id:A,share_amount_paise:30000},{expense_id:e2.id,member_id:B,share_amount_paise:30000}]);
 rec("R6 creator (non-payer) can insert that expense's splits", !s2e, s2e?.message);
 
-// R7: payer can edit their own expense (deployed 3-request flow)
-const {data:u1,error:u1e}=await alice.c.from("expenses").update({title:"Rent (May)",amount_paise:120000})
-  .eq("id",e1.id).select().single();
-rec("R7 payer edits own expense (amount change)", !u1e && u1?.amount_paise===120000, u1e?.message);
-const {error:d1e}=await alice.c.from("expense_splits").delete().eq("expense_id",e1.id);
-rec("R8 payer clears old splits", !d1e, d1e?.message);
-const {error:i1e}=await alice.c.from("expense_splits").insert([
-  {expense_id:e1.id,member_id:A,share_amount_paise:60000},{expense_id:e1.id,member_id:B,share_amount_paise:60000}]);
-rec("R9 payer writes new splits", !i1e, i1e?.message);
+// R7: payer edits their own expense atomically via the RPC (the path the
+// deployed app uses). The legacy three-request flow is deliberately no longer
+// valid: changing the amount while the old splits are still attached now
+// violates the split-sum invariant, which is the whole point of it.
+const {data:u1,error:u1e}=await alice.c.rpc("update_expense_with_splits",{
+  p_expense_id:e1.id,p_title:"Rent (May)",p_description:null,p_category:"rent",
+  p_amount_paise:120000,p_expense_date:new Date().toISOString(),p_split_type:"equal",p_paid_by:A,
+  p_splits:[{member_id:A,share_amount_paise:60000},{member_id:B,share_amount_paise:60000}]});
+rec("R7 payer edits own expense atomically (amount + splits in one txn)", !u1e && u1?.amount_paise===120000, u1e?.message);
+
+const {data:afterEdit}=await alice.c.from("expense_splits").select("share_amount_paise").eq("expense_id",e1.id);
+const editSum=(afterEdit??[]).reduce((s,r)=>s+r.share_amount_paise,0);
+rec("R8 splits replaced and still sum to the new amount", editSum===120000 && (afterEdit??[]).length===2, `sum=${editSum} rows=${(afterEdit??[]).length}`);
+
+// R9: a non-payer must not be able to edit through the RPC either -- the RPC
+// bypasses RLS, so its own payer check IS the authorization.
+const {error:i1e}=await bob.c.rpc("update_expense_with_splits",{
+  p_expense_id:e1.id,p_title:"hijacked",p_description:null,p_category:"rent",
+  p_amount_paise:120000,p_expense_date:new Date().toISOString(),p_split_type:"equal",p_paid_by:B,
+  p_splits:[{member_id:A,share_amount_paise:60000},{member_id:B,share_amount_paise:60000}]});
+rec("R9 non-payer cannot edit via the RPC (SECURITY DEFINER enforces payer-only)", Boolean(i1e), i1e?.message?.slice(0,60));
 
 // R10: full settlement request -> approve flow
 const {data:req,error:reqe}=await bob.c.rpc("create_settlement_request",
@@ -98,9 +110,97 @@ const {data:x1}=await alice.c.from("expenses").insert({flat_id:flat.id,title:"Wi
 const {data:x2}=await alice.c.from("expenses").insert({flat_id:flat.id,title:"WiFi",category:"internet",
   amount_paise:200000,expense_date:new Date().toISOString(),split_type:"equal",paid_by:A,created_by:alice.id,client_dedupe_key:dk2}).select().single();
 rec("R18 two identical expenses with different dedupe keys both persist", Boolean(x1?.id&&x2?.id&&x1.id!==x2.id));
+// Give both legacy-path rows real splits so they don't register as
+// zero-split artifacts in R27 below.
+for (const x of [x1,x2]) {
+  if (x?.id) await alice.c.from("expense_splits").insert([
+    {expense_id:x.id,member_id:A,share_amount_paise:100000},
+    {expense_id:x.id,member_id:B,share_amount_paise:100000}]);
+}
 const {error:dupErr}=await alice.c.from("expenses").insert({flat_id:flat.id,title:"WiFi",category:"internet",
   amount_paise:200000,expense_date:new Date().toISOString(),split_type:"equal",paid_by:A,created_by:alice.id,client_dedupe_key:dk1});
 rec("R19 replaying the SAME dedupe key is rejected by the DB", dupErr?.code==="23505", dupErr?.code);
+
+// ---------------------------------------------------------------------------
+// Split-sum invariant (20260902000002). These are the checks that make a
+// fabricated debt impossible rather than merely hard.
+// ---------------------------------------------------------------------------
+
+// R20: atomic creation via the RPC, and it must reject an unbalanced split set.
+const {data:okExp,error:okErr}=await alice.c.rpc("create_expense_with_splits",{
+  p_flat_id:flat.id,p_title:"Balanced",p_description:null,p_category:"other",
+  p_amount_paise:10000,p_expense_date:new Date().toISOString(),p_split_type:"equal",p_paid_by:A,
+  p_splits:[{member_id:A,share_amount_paise:5000},{member_id:B,share_amount_paise:5000}]});
+rec("R20 atomic create with balanced splits succeeds", !okErr && Boolean(okExp?.id), okErr?.message);
+
+const {error:badErr}=await alice.c.rpc("create_expense_with_splits",{
+  p_flat_id:flat.id,p_title:"Unbalanced",p_description:null,p_category:"other",
+  p_amount_paise:10000,p_expense_date:new Date().toISOString(),p_split_type:"equal",p_paid_by:A,
+  p_splits:[{member_id:A,share_amount_paise:5000},{member_id:B,share_amount_paise:999999}]});
+rec("R21 atomic create REJECTS splits that don't sum to the amount", Boolean(badErr), badErr?.message?.slice(0,70));
+
+// R22: the payer's own attempt to desync splits directly (bypassing the RPC)
+// must be caught by the deferred constraint trigger.
+const {error:tamperErr}=await alice.c.from("expense_splits")
+  .update({share_amount_paise:1}).eq("expense_id",okExp.id).eq("member_id",A);
+rec("R22 direct split tamper blocked by split-sum trigger", Boolean(tamperErr), tamperErr?.message?.slice(0,70));
+
+// R23: the reverse direction -- editing amount_paise alone while splits exist.
+const {error:amtErr}=await alice.c.from("expenses").update({amount_paise:777777}).eq("id",okExp.id);
+rec("R23 amount-only edit blocked when it would desync splits", Boolean(amtErr), amtErr?.message?.slice(0,70));
+
+// R24: idempotency now resolved server-side -- replaying a dedupe key returns
+// the SAME expense instead of erroring or creating a second one.
+const dk=crypto.randomUUID();
+const args={p_flat_id:flat.id,p_title:"Idem",p_description:null,p_category:"other",
+  p_amount_paise:4000,p_expense_date:new Date().toISOString(),p_split_type:"equal",p_paid_by:A,
+  p_splits:[{member_id:A,share_amount_paise:2000},{member_id:B,share_amount_paise:2000}],p_dedupe_key:dk};
+const {data:i1}=await alice.c.rpc("create_expense_with_splits",args);
+const {data:i2,error:i2e}=await alice.c.rpc("create_expense_with_splits",args);
+rec("R24 replaying a dedupe key returns the SAME expense (server-side idempotency)",
+    !i2e && i1?.id===i2?.id, i2e?.message ?? `${i1?.id===i2?.id}`);
+
+// R25: concurrent double-submit with the same key still yields exactly one row.
+const dkConc=crypto.randomUUID();
+const args2={...args,p_dedupe_key:dkConc,p_title:"Concurrent"};
+const [c1r,c2r]=await Promise.all([
+  alice.c.rpc("create_expense_with_splits",args2),
+  alice.c.rpc("create_expense_with_splits",args2)]);
+const {data:dupRows}=await alice.c.from("expenses").select("id").eq("client_dedupe_key",dkConc);
+rec("R25 concurrent double-submit creates exactly one expense",
+    (dupRows??[]).length===1 && !c1r.error && !c2r.error,
+    `rows=${(dupRows??[]).length} e1=${c1r.error?.code??"-"} e2=${c2r.error?.code??"-"}`);
+
+// R26: two legitimately identical expenses (different keys) stay separate.
+const {data:s1}=await alice.c.rpc("create_expense_with_splits",{...args,p_dedupe_key:crypto.randomUUID(),p_title:"WiFi"});
+const {data:s2}=await alice.c.rpc("create_expense_with_splits",{...args,p_dedupe_key:crypto.randomUUID(),p_title:"WiFi"});
+rec("R26 identical expenses with different keys remain separate", Boolean(s1?.id&&s2?.id&&s1.id!==s2.id));
+
+// R27: no zero-split expense can be left behind by the atomic path.
+const {data:zeroSplit}=await alice.c.from("expenses").select("id,amount_paise").eq("flat_id",flat.id);
+let zeroCount=0, badSum=0;
+for (const ex of zeroSplit??[]) {
+  const {data:sp}=await alice.c.from("expense_splits").select("share_amount_paise").eq("expense_id",ex.id);
+  if ((sp??[]).length===0) zeroCount++;
+  else if ((sp??[]).reduce((s,r)=>s+r.share_amount_paise,0)!==ex.amount_paise) badSum++;
+}
+rec("R27 no zero-split and no mismatched-sum expenses in the test flat", zeroCount===0 && badSum===0, `zero=${zeroCount} badSum=${badSum}`);
+
+// R28: KNOWN RESIDUAL (low). The split-sum trigger only fires once splits
+// exist, so a direct `INSERT INTO expenses` with no splits at all is still
+// accepted. The deployed client never does this -- creation goes through
+// create_expense_with_splits, which requires at least one split -- so this is
+// only reachable by a deliberate raw API call. Impact is limited to the
+// caller inflating their OWN "you are owed" figure: with no split rows there
+// is no counterpart, so no actionable debt is created against anyone, and the
+// expense shows in Activity with no participants. Closing it fully means
+// revoking direct INSERT on expenses and routing creation exclusively through
+// the RPC. Asserted here so the gap stays visible and cannot regress silently.
+const {data:zs}=await alice.c.from("expenses").insert({flat_id:flat.id,title:"NoSplits",category:"other",
+  amount_paise:5000,expense_date:new Date().toISOString(),split_type:"equal",paid_by:A,created_by:alice.id}).select();
+rec("R28 KNOWN GAP: direct insert can still create a zero-split expense", (zs??[]).length===1,
+    `rows=${(zs??[]).length} -- documented, low severity`);
+if ((zs??[])[0]?.id) await alice.c.from("expenses").delete().eq("id",zs[0].id);
 
 console.log("\n=== REGRESSION SUMMARY ===");
 const f=R.filter(r=>!r.p);

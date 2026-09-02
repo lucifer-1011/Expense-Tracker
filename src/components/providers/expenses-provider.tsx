@@ -196,7 +196,11 @@ export function ExpensesProvider({ children }: { children: ReactNode }) {
         .rpc("create_expense_with_splits", {
           p_flat_id: flat.id,
           p_title: input.title,
-          p_description: input.description ?? null,
+          // supabase gen types emits every non-defaulted argument as
+          // non-nullable, but this one is `text` and genuinely accepts NULL
+          // (an expense with no description). It has no SQL default, so it
+          // cannot simply be omitted -- hence the cast.
+          p_description: (input.description ?? null) as unknown as string,
           p_category: input.category,
           p_amount_paise: input.amountPaise,
           p_expense_date: input.date,
@@ -313,7 +317,11 @@ export function ExpensesProvider({ children }: { children: ReactNode }) {
         .rpc("update_expense_with_splits", {
           p_expense_id: expenseId,
           p_title: input.title,
-          p_description: input.description ?? null,
+          // supabase gen types emits every non-defaulted argument as
+          // non-nullable, but this one is `text` and genuinely accepts NULL
+          // (an expense with no description). It has no SQL default, so it
+          // cannot simply be omitted -- hence the cast.
+          p_description: (input.description ?? null) as unknown as string,
           p_category: input.category,
           p_amount_paise: input.amountPaise,
           p_expense_date: input.date,

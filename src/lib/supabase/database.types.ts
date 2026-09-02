@@ -539,6 +539,41 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      create_expense_with_splits: {
+        Args: {
+          p_amount_paise: number
+          p_category: string
+          p_dedupe_key?: string
+          p_description: string
+          p_expense_date: string
+          p_flat_id: string
+          p_paid_by: string
+          p_split_type: string
+          p_splits: Json
+          p_title: string
+        }
+        Returns: {
+          amount_paise: number
+          category: string
+          client_dedupe_key: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          expense_date: string
+          flat_id: string
+          id: string
+          paid_by: string
+          split_type: string
+          title: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "expenses"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_flat: {
         Args: { flat_name: string }
         Returns: {
@@ -598,6 +633,10 @@ export type Database = {
       }
       is_flat_member: { Args: { target_flat_id: string }; Returns: boolean }
       is_flat_owner: { Args: { target_flat_id: string }; Returns: boolean }
+      is_own_flat_member: {
+        Args: { target_member_id: string }
+        Returns: boolean
+      }
       join_flat_with_invite_code: {
         Args: { code: string }
         Returns: {
@@ -634,79 +673,6 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      // Hand-added to match supabase/migrations/20260902000002_expense_split_integrity.sql.
-      // Regenerate this file with `supabase gen types typescript --linked`
-      // once that migration is applied, and these entries will be produced
-      // automatically.
-      create_expense_with_splits: {
-        Args: {
-          p_flat_id: string
-          p_title: string
-          p_description: string | null
-          p_category: string
-          p_amount_paise: number
-          p_expense_date: string
-          p_split_type: string
-          p_paid_by: string
-          p_splits: Json
-          p_dedupe_key?: string
-        }
-        Returns: {
-          amount_paise: number
-          category: string
-          client_dedupe_key: string | null
-          created_at: string
-          created_by: string | null
-          description: string | null
-          expense_date: string
-          flat_id: string
-          id: string
-          paid_by: string
-          split_type: string
-          title: string
-          updated_at: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "expenses"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      update_expense_with_splits: {
-        Args: {
-          p_expense_id: string
-          p_title: string
-          p_description: string | null
-          p_category: string
-          p_amount_paise: number
-          p_expense_date: string
-          p_split_type: string
-          p_paid_by: string
-          p_splits: Json
-        }
-        Returns: {
-          amount_paise: number
-          category: string
-          client_dedupe_key: string | null
-          created_at: string
-          created_by: string | null
-          description: string | null
-          expense_date: string
-          flat_id: string
-          id: string
-          paid_by: string
-          split_type: string
-          title: string
-          updated_at: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "expenses"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
       reject_settlement_request: {
         Args: { request_id: string }
         Returns: {
@@ -733,6 +699,40 @@ export type Database = {
         }
       }
       shares_flat_with: { Args: { target_user_id: string }; Returns: boolean }
+      update_expense_with_splits: {
+        Args: {
+          p_amount_paise: number
+          p_category: string
+          p_description: string
+          p_expense_date: string
+          p_expense_id: string
+          p_paid_by: string
+          p_split_type: string
+          p_splits: Json
+          p_title: string
+        }
+        Returns: {
+          amount_paise: number
+          category: string
+          client_dedupe_key: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          expense_date: string
+          flat_id: string
+          id: string
+          paid_by: string
+          split_type: string
+          title: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "expenses"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       [_ in never]: never

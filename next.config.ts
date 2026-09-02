@@ -29,7 +29,13 @@ const csp = [
   "img-src 'self' data: blob: https://lh3.googleusercontent.com",
   "font-src 'self' data:",
   `connect-src 'self' ${SUPABASE_ORIGIN} ${SUPABASE_WS_ORIGIN}`.trim(),
-  "upgrade-insecure-requests",
+  // Deliberately no `upgrade-insecure-requests`. It rewrites every http://
+  // request to https://, and Safari/WebKit applies that to http://localhost
+  // as well (Chromium exempts localhost as a trustworthy origin), so every
+  // asset on a local server fails with a TLS error -- it broke `next dev`
+  // and `next start` in Safari. It bought nothing in return: deployments are
+  // HTTPS-only and already carry HSTS below, which enforces HTTPS far more
+  // strongly, and every subresource here is same-origin or already https.
 ].join("; ");
 
 const nextConfig: NextConfig = {

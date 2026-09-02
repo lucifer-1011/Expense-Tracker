@@ -35,6 +35,58 @@ type ExpenseSplitRow = Database["public"]["Tables"]["expense_splits"]["Row"];
 /** Postgres unique_violation. */
 const UNIQUE_VIOLATION = "23505";
 
+/**
+ * postgrest-js turns a rejected fetch into a normal-looking error object
+ * whose `code` is an empty string -- every genuine PostgREST/Postgres
+ * failure carries one (PGRST202, 23505, 42501, 23514, ...). The `message`
+ * is just whatever the engine's TypeError said, which is
+ * "TypeError: Load failed" in Safari/iOS and "TypeError: fetch failed"
+ * elsewhere, so match on the code rather than on that text.
+ */
+function isNetworkError(error: { code?: string } | null | undefined): boolean {
+  return Boolean(error) && !error!.code;
+}
+
+/**
+ * Shown instead of the raw engine string. "TypeError: Load failed" is
+ * meaningless to a user and reads like a crash rather than a dropped
+ * connection.
+ */
+const NETWORK_MESSAGE = "Couldn't reach the server. Check your connection and try again.";
+
+/**
+ * Picks the message to surface for a failed Supabase call: a connection
+ * problem gets the plain-language line above, anything else keeps the real
+ * database message, which is genuinely useful (a constraint name, a
+ * permission denial) and is what the existing error paths already showed.
+ */
+function describeError(error: { code?: string; message?: string } | null | undefined, fallback: string): string {
+  if (isNetworkError(error)) return NETWORK_MESSAGE;
+  return error?.message ?? fallback;
+}
+
+/**
+ * A write that fails at the network layer has a genuinely unknown outcome:
+ * the request may have reached Postgres and committed before the connection
+ * dropped, which is common on mobile. The dedupe key is what makes that
+ * recoverable -- if a row already carries it, this submission did land, so
+ * resolve to it instead of reporting a failure the user would retry.
+ */
+async function findExpenseByDedupeKey(
+  supabase: ReturnType<typeof createClient>,
+  dedupeKey: string
+): Promise<Expense | null> {
+  const { data, error } = await supabase
+    .from("expenses")
+    .select("*, expense_splits(*)")
+    .eq("client_dedupe_key", dedupeKey)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  const { expense_splits, ...expenseRow } = data;
+  return mapExpenseRow(expenseRow, expense_splits as ExpenseSplitRow[]);
+}
+
 type ExpenseRow = Database["public"]["Tables"]["expenses"]["Row"];
 
 /**
@@ -67,14 +119,14 @@ async function legacyUpdateExpense(
     .single();
 
   if (expenseError || !expenseRow) {
-    throw new Error(expenseError?.message ?? "Couldn't update the expense.");
+    throw new Error(describeError(expenseError, "Couldn't update the expense."));
   }
 
   const { error: deleteSplitsError } = await supabase
     .from("expense_splits")
     .delete()
     .eq("expense_id", expenseId);
-  if (deleteSplitsError) throw new Error(deleteSplitsError.message);
+  if (deleteSplitsError) throw new Error(describeError(deleteSplitsError, "Couldn't update the expense."));
 
   const { error: splitsError } = await supabase.from("expense_splits").insert(
     input.splits.map((s) => ({
@@ -83,7 +135,7 @@ async function legacyUpdateExpense(
       share_amount_paise: s.shareAmountPaise,
     }))
   );
-  if (splitsError) throw new Error(splitsError.message);
+  if (splitsError) throw new Error(describeError(splitsError, "Couldn't update the expense."));
 
   return expenseRow;
 }
@@ -226,6 +278,23 @@ export function ExpensesProvider({ children }: { children: ReactNode }) {
         );
         return created;
       }
+      if (rpcError && isNetworkError(rpcError)) {
+        // The connection dropped with the outcome unknown. If this dedupe
+        // key already exists, the write actually committed -- surface it as
+        // the success it was instead of an error the user would retry.
+        if (input.dedupeKey) {
+          const recovered = await findExpenseByDedupeKey(supabase, input.dedupeKey);
+          if (recovered) {
+            setExpenses((prev) =>
+              prev.some((e) => e.id === recovered.id)
+                ? prev
+                : [recovered, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+            );
+            return recovered;
+          }
+        }
+        throw new Error(NETWORK_MESSAGE);
+      }
       if (rpcError && rpcError.code !== "PGRST202") {
         throw new Error(rpcError.message);
       }
@@ -253,16 +322,13 @@ export function ExpensesProvider({ children }: { children: ReactNode }) {
         // click that raced past the disabled-button window, or a resubmit
         // after the page refreshed mid-submission. Resolve to that existing
         // row instead of erroring, rather than creating a second expense.
-        if (expenseError?.code === UNIQUE_VIOLATION && input.dedupeKey) {
-          const { data: existing, error: existingError } = await supabase
-            .from("expenses")
-            .select("*, expense_splits(*)")
-            .eq("client_dedupe_key", input.dedupeKey)
-            .single();
-
-          if (existing && !existingError) {
-            const { expense_splits, ...existingRow } = existing;
-            const resolved = mapExpenseRow(existingRow, expense_splits as ExpenseSplitRow[]);
+        // Both a unique-violation on client_dedupe_key and a dropped
+        // connection mean the same thing here: this submission may already
+        // have landed. The first is certain, the second merely possible --
+        // either way the dedupe key settles it.
+        if ((expenseError?.code === UNIQUE_VIOLATION || isNetworkError(expenseError)) && input.dedupeKey) {
+          const resolved = await findExpenseByDedupeKey(supabase, input.dedupeKey);
+          if (resolved) {
             setExpenses((prev) =>
               prev.some((e) => e.id === resolved.id)
                 ? prev
@@ -271,6 +337,7 @@ export function ExpensesProvider({ children }: { children: ReactNode }) {
             return resolved;
           }
         }
+        if (isNetworkError(expenseError)) throw new Error(NETWORK_MESSAGE);
         throw new Error(expenseError?.message ?? "Couldn't save the expense.");
       }
 
@@ -288,7 +355,7 @@ export function ExpensesProvider({ children }: { children: ReactNode }) {
       if (splitsError) {
         // Compensating action: don't leave a split-less expense behind.
         await supabase.from("expenses").delete().eq("id", expenseRow.id);
-        throw new Error(splitsError.message);
+        throw new Error(describeError(splitsError, "Couldn't save the expense."));
       }
 
       const expense = mapExpenseRow(expenseRow, splitRows ?? []);
@@ -345,7 +412,7 @@ export function ExpensesProvider({ children }: { children: ReactNode }) {
       if (expenseError?.code === "PGRST202") {
         resolvedExpenseRow = await legacyUpdateExpense(supabase, expenseId, input);
       } else if (expenseError || !expenseRow) {
-        throw new Error(expenseError?.message ?? "Couldn't update the expense.");
+        throw new Error(describeError(expenseError, "Couldn't update the expense."));
       } else {
         resolvedExpenseRow = expenseRow;
       }
@@ -356,7 +423,7 @@ export function ExpensesProvider({ children }: { children: ReactNode }) {
         .eq("expense_id", expenseId);
 
       if (splitsError) {
-        throw new Error(splitsError.message);
+        throw new Error(describeError(splitsError, "Couldn't save the expense."));
       }
 
       const updated = mapExpenseRow(resolvedExpenseRow, splitRows ?? []);
@@ -375,7 +442,7 @@ export function ExpensesProvider({ children }: { children: ReactNode }) {
     // expense_splits cascade-delete with the expense (ON DELETE CASCADE).
     const { error: deleteError } = await supabase.from("expenses").delete().eq("id", expenseId);
     if (deleteError) {
-      throw new Error(deleteError.message);
+      throw new Error(describeError(deleteError, "Couldn't delete the expense."));
     }
     setExpenses((prev) => prev.filter((e) => e.id !== expenseId));
   }, []);

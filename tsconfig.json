@@ -6,6 +6,11 @@
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
+    // The node:test files import siblings with an explicit .ts extension so
+    // `node --test` can run the TypeScript sources directly (Node's ESM
+    // resolver does no extension guessing). Safe here because noEmit is on --
+    // nothing is compiled to JS, so no extension is ever wrong at runtime.
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",

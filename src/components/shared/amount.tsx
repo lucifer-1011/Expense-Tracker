@@ -15,17 +15,15 @@ const VARIANT_CLASSES: Record<AmountVariant, string> = {
 export function Amount({
   amountPaise,
   variant = "default",
-  showDecimals,
   className,
 }: {
   amountPaise: number;
   variant?: AmountVariant;
-  showDecimals?: boolean;
   className?: string;
 }) {
   return (
     <span className={cn("tabular-nums font-semibold", VARIANT_CLASSES[variant], className)}>
-      {formatPaise(amountPaise, { showDecimals })}
+      {formatPaise(amountPaise)}
     </span>
   );
 }

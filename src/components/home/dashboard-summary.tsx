@@ -17,9 +17,10 @@ import { cn } from "@/lib/utils";
  * between them. Every color here is a theme token (text-foreground,
  * text-muted-foreground, text-positive/negative-muted-foreground) so light
  * and dark mode both resolve correctly automatically -- nothing here is a
- * hardcoded hex value. The hero auto-fits down through 76/64/56px so a wide
- * amount never overflows its column; the count-up animates off the real
- * (paise) target, not the display string.
+ * hardcoded hex value. The hero continuously scales its font size (see
+ * useHeroFontSize) so a wide amount never overflows its column, however long
+ * it gets; the count-up animates off the real (paise) target, not the
+ * display string.
  */
 export function DashboardSummary() {
   const { membership } = useCurrentFlat();

@@ -83,11 +83,57 @@ test("Rs 100 split 3 ways allocates the odd paisa deterministically: 33.34 + 33.
     splits.map((s) => s.shareAmountPaise),
     [3334, 3333, 3333]
   );
+  // The exact requirement: floor(totalPaise / n) to everyone, remainder
+  // distributed one paisa at a time -- SUM must equal the original amount
+  // to the paisa. 3334 + 3333 + 3333 = 10000, i.e. Rs 100.00 exactly (NOT
+  // 3333 x 3 = 9999, which would silently lose one paisa).
   assert.equal(splits.reduce((n, s) => n + s.shareAmountPaise, 0), 100 * RUPEE);
   assert.deepEqual(splits.map((s) => norm(formatPaise(s.shareAmountPaise))), [
     "₹33.34",
     "₹33.33",
     "₹33.33",
+  ]);
+});
+
+test("Rs 10 split 3 ways: 3.34 + 3.33 + 3.33, summing to exactly Rs 10.00", () => {
+  const splits = splitEqually(10 * RUPEE, ["A", "B", "C"]);
+  assert.deepEqual(
+    splits.map((s) => s.shareAmountPaise),
+    [334, 333, 333]
+  );
+  assert.equal(splits.reduce((n, s) => n + s.shareAmountPaise, 0), 10 * RUPEE);
+  assert.deepEqual(splits.map((s) => norm(formatPaise(s.shareAmountPaise))), [
+    "₹3.34",
+    "₹3.33",
+    "₹3.33",
+  ]);
+});
+
+test("Rs 1 split 3 ways: 0.34 + 0.33 + 0.33, summing to exactly Rs 1.00", () => {
+  const splits = splitEqually(1 * RUPEE, ["A", "B", "C"]);
+  assert.deepEqual(
+    splits.map((s) => s.shareAmountPaise),
+    [34, 33, 33]
+  );
+  assert.equal(splits.reduce((n, s) => n + s.shareAmountPaise, 0), 1 * RUPEE);
+  assert.deepEqual(splits.map((s) => norm(formatPaise(s.shareAmountPaise))), [
+    "₹0.34",
+    "₹0.33",
+    "₹0.33",
+  ]);
+});
+
+test("Rs 499 split 3 ways: 166.34 + 166.33 + 166.33, summing to exactly Rs 499.00", () => {
+  const splits = splitEqually(499 * RUPEE, ["A", "B", "C"]);
+  assert.deepEqual(
+    splits.map((s) => s.shareAmountPaise),
+    [16634, 16633, 16633]
+  );
+  assert.equal(splits.reduce((n, s) => n + s.shareAmountPaise, 0), 499 * RUPEE);
+  assert.deepEqual(splits.map((s) => norm(formatPaise(s.shareAmountPaise))), [
+    "₹166.34",
+    "₹166.33",
+    "₹166.33",
   ]);
 });
 
